@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 import { AlertCircle, CheckCircle,BookOpen, Clock, FileText, Users, TrendingUp, AlertTriangle, Shield, Upload, Mail, UserCheck, X, Download, Bell, Link, FileBarChart } from 'lucide-react';
 import {
@@ -136,6 +136,217 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
       };
     }
   };
+  // Sample Data Seeder
+const sampleData = {
+  complaints: [
+    {
+      id: 1001,
+      title: "Packaging Leakage - Batch XYZ123",
+      description: "Customer reported leakage from damaged packaging during transit. Potential contamination risk.",
+      severity: "Critical",
+      product: "Product ABC - 500mg Tablets",
+      status: "In Progress",
+      approvalStatus: "In Review",
+      createdDate: "2025-12-15",
+      createdBy: "Current User",
+      attachments: [{ name: "customer_photo.jpg", size: 245760, date: "2025-12-16" }],
+      comments: [
+        { author: "QA Team", date: "2025-12-16", text: "Investigation initiated. Lab testing requested." }
+      ],
+      linkedRecords: [{ module: "capa", id: 2001, title: "CAPA-2026-001: Improve Packaging Strength" }],
+      approvalChain: [
+        { role: "QA Manager", status: "Approved", date: "2025-12-20" },
+        { role: "Department Head", status: "Pending", date: null },
+        { role: "Quality Director", status: "Pending", date: null }
+      ],
+      auditTrail: [
+        { action: "Record Created", user: "Current User", timestamp: "2025-12-15 10:30", details: "New complaint initiated" },
+        { action: "Comment Added", user: "QA Team", timestamp: "2025-12-16 14:20", details: "Comment: Investigation initiated..." }
+      ],
+      emailsSent: []
+    },
+    {
+      id: 1002,
+      title: "Labeling Error on Batch ABC456",
+      description: "Incorrect expiry date printed on labels. Regulatory non-compliance risk.",
+      severity: "High",
+      product: "Product XYZ - 250mg Capsules",
+      status: "Open",
+      approvalStatus: "Pending",
+      createdDate: "2025-12-28",
+      createdBy: "Current User",
+      attachments: [],
+      comments: [],
+      linkedRecords: [],
+      approvalChain: [
+        { role: "QA Manager", status: "Pending", date: null },
+        { role: "Department Head", status: "Pending", date: null },
+        { role: "Quality Director", status: "Pending", date: null }
+      ],
+      auditTrail: [
+        { action: "Record Created", user: "Current User", timestamp: "2025-12-28 09:15", details: "New complaint initiated" }
+      ],
+      emailsSent: []
+    }
+  ],
+  capa: [
+    {
+      id: 2001,
+      title: "CAPA-2026-001: Improve Packaging Strength",
+      rootCause: "Insufficient cushioning and weak seal strength identified.",
+      correctiveAction: "Update packaging spec: double-layer bubble wrap + reinforced seals.",
+      preventiveAction: "Quarterly packaging integrity testing + supplier audit.",
+      status: "Effectiveness Pending",
+      approvalStatus: "Approved",
+      createdDate: "2025-12-18",
+      createdBy: "Current User",
+      effectivenessDueDate: "2026-01-17",
+      effectivenessChecked: false,
+      linkedRecords: [{ module: "complaints", id: 1001, title: "Packaging Leakage - Batch XYZ123" }],
+      approvalChain: [
+        { role: "QA Manager", status: "Approved", date: "2025-12-20" },
+        { role: "Department Head", status: "Approved", date: "2025-12-22" },
+        { role: "Quality Director", status: "Approved", date: "2025-12-23" }
+      ],
+      auditTrail: [
+        { action: "Record Created", user: "Current User", timestamp: "2025-12-18 11:00", details: "CAPA initiated from Complaint #1001" },
+        { action: "Approved", user: "qa.manager", timestamp: "2025-12-20 15:30", details: "QA Manager approved" }
+      ],
+      comments: [],
+      attachments: [],
+      emailsSent: []
+    }
+  ],
+  audits: [
+    {
+      id: 3001,
+      auditTitle: "Annual GMP Audit 2026",
+      auditType: "Internal",
+      auditDate: "2026-03-15",
+      auditor: "Jane Smith",
+      status: "Scheduled",
+      approvalStatus: "Pending",
+      createdDate: "2025-12-10",
+      createdBy: "Current User",
+      attachments: [],
+      comments: [],
+      linkedRecords: [],
+      approvalChain: [
+        { role: "QA Manager", status: "Pending", date: null },
+        { role: "Department Head", status: "Pending", date: null },
+        { role: "Quality Director", status: "Pending", date: null }
+      ],
+      auditTrail: [
+        { action: "Record Created", user: "Current User", timestamp: "2025-12-10 08:45", details: "Audit scheduled" }
+      ],
+      emailsSent: []
+    }
+  ],
+  oot: [
+    {
+      id: 4001,
+      testName: "Dissolution Test - Batch DEF789",
+      result: "78%",
+      specification: "80-120%",
+      investigation: "Trend observed over last 3 batches. Possible equipment calibration drift.",
+      status: "Open",
+      approvalStatus: "Pending",
+      createdDate: "2025-12-20",
+      createdBy: "Current User",
+      attachments: [{ name: "lab_report.pdf", size: 512000, date: "2025-12-21" }],
+      comments: [],
+      linkedRecords: [],
+      approvalChain: [
+        { role: "QA Manager", status: "Pending", date: null },
+        { role: "Department Head", status: "Pending", date: null },
+        { role: "Quality Director", status: "Pending", date: null }
+      ],
+      auditTrail: [
+        { action: "Record Created", user: "Current User", timestamp: "2025-12-20 13:20", details: "New OOT record initiated" }
+      ],
+      emailsSent: []
+    }
+  ],
+  vendors: [
+    {
+      id: 5001,
+      vendorName: "Packaging Solutions Inc.",
+      category: "Primary Packaging",
+      qualificationStatus: "Qualified",
+      auditDate: "2025-11-01",
+      status: "Active",
+      approvalStatus: "Approved",
+      createdDate: "2025-10-15",
+      createdBy: "Current User",
+      attachments: [],
+      comments: [],
+      linkedRecords: [],
+      approvalChain: [
+        { role: "QA Manager", status: "Approved", date: "2025-10-20" },
+        { role: "Department Head", status: "Approved", date: "2025-10-21" },
+        { role: "Quality Director", status: "Approved", date: "2025-10-22" }
+      ],
+      auditTrail: [
+        { action: "Record Created", user: "Current User", timestamp: "2025-10-15 10:00", details: "New vendor added" }
+      ],
+      emailsSent: []
+    }
+  ],
+  risks: [
+    {
+      id: 6001,
+      riskTitle: "Supply Chain Disruption Risk",
+      probability: "Medium",
+      severity: "High",
+      mitigation: "Dual sourcing strategy implemented with secondary supplier qualified.",
+      riskScore: 6,
+      riskLevel: "High",
+      status: "Open",
+      approvalStatus: "Pending",
+      createdDate: "2025-12-05",
+      createdBy: "Current User",
+      attachments: [],
+      comments: [],
+      linkedRecords: [],
+      approvalChain: [
+        { role: "QA Manager", status: "Pending", date: null },
+        { role: "Department Head", status: "Pending", date: null },
+        { role: "Quality Director", status: "Pending", date: null }
+      ],
+      auditTrail: [
+        { action: "Record Created", user: "Current User", timestamp: "2025-12-05 11:30", details: "New risk assessment initiated" }
+      ],
+      emailsSent: []
+    }
+  ],
+  recalls: [
+    {
+      id: 7001,
+      productName: "Product DEF - 100mg Injection",
+      batchNumber: "GHI789",
+      reason: "Potential microbial contamination",
+      recallClass: "Class I",
+      status: "Initiated",
+      approvalStatus: "Pending",
+      createdDate: "2025-12-30",
+      createdBy: "Current User",
+      attachments: [],
+      comments: [],
+      linkedRecords: [],
+      approvalChain: [
+        { role: "QA Manager", status: "Pending", date: null },
+        { role: "Department Head", status: "Pending", date: null },
+        { role: "Quality Director", status: "Pending", date: null }
+      ],
+      auditTrail: [
+        { action: "Record Created", user: "Current User", timestamp: "2025-12-30 16:00", details: "Recall initiated" }
+      ],
+      emailsSent: []
+    }
+  ]
+};
+
+
   const RecordPDFDocument = ({ record, module }) => (
   <Document>
     <Page size="A4" style={styles.page}>
@@ -508,6 +719,16 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
   const [notifications, setNotifications] = useState(loadNotificationsFromStorage);
   const [showNotifications, setShowNotifications] = useState(false);
 
+
+// Seed sample data only on first visit (when localStorage is empty)
+useEffect(() => {
+  const loaded = localStorage.getItem('qms_records');
+  if (!loaded || JSON.parse(loaded) && Object.values(JSON.parse(loaded)).every(arr => arr.length === 0)) {
+    setRecords(sampleData);
+    localStorage.setItem('qms_records', JSON.stringify(sampleData));
+    addNotification('Welcome! Sample data loaded for demo.', 'info');
+  }
+}, []); // Empty dependency → runs only once on mount
   // Save to localStorage whenever records change
   React.useEffect(() => {
     try {
@@ -812,7 +1033,7 @@ const Dashboard = () => {
   ].filter(m => m.count > 0);
 
   // Simulated monthly trend (you can enhance this later with real dates)
-  const monthlyLabels = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthlyLabels = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec','Jan'];
 const getMonth = (dateStr) => {
   if (!dateStr) return null;
 
