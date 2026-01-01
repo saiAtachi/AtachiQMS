@@ -82,13 +82,17 @@ const ESignatureModal = ({
           >
             Cancel
           </button>
+          
           <button
             onClick={handleConfirm}
             className={`px-4 py-2 text-white rounded ${
-              action === 'Approve' ? 'bg-green-600' : 'bg-red-600'
+              action.includes('Effective') ? 'bg-green-600' :
+              action.includes('Ineffective') ? 'bg-red-600' :
+              action === 'Approve' ? 'bg-green-600' :
+              'bg-red-600'
             }`}
           >
-            Confirm {action}
+            {action}
           </button>
         </div>
       </div>

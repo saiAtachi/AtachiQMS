@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle, Clock, FileText, Users, TrendingUp, AlertTriangle, Shield, Upload, Mail, UserCheck, X, Download, Bell, Link } from 'lucide-react';
+
+import { AlertCircle, CheckCircle,BookOpen, Clock, FileText, Users, TrendingUp, AlertTriangle, Shield, Upload, Mail, UserCheck, X, Download, Bell, Link, FileBarChart } from 'lucide-react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,10 +12,10 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
-import { Line, Doughnut } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 import { Bar } from 'react-chartjs-2';
 import ESignatureModal from './EsignModal'; 
-
+import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Font } from '@react-pdf/renderer';
 
 
 ChartJS.register(
@@ -29,7 +30,77 @@ ChartJS.register(
 );
 
 
+Font.register({
+  family: 'Roboto',
+  src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-regular-webfont.ttf'
+});
 
+const styles = StyleSheet.create({
+  page: {
+    padding: 40,
+    fontFamily: 'Roboto',
+    fontSize: 12,
+    color: '#1f2937'
+  },
+  header: {
+    textAlign: 'center',
+    marginBottom: 30,
+    borderBottomWidth: 3,
+    borderBottomColor: '#2563eb',
+    paddingBottom: 20
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 10
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#6b7280'
+  },
+  section: {
+    marginBottom: 25
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingBottom: 6
+  },
+  table: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 10
+  },
+  tableRow: {
+    flexDirection: 'row'
+  },
+  tableCell: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 8,
+    flex: 1
+  },
+  tableHeader: {
+    backgroundColor: '#f3f4f6',
+    fontWeight: 'bold'
+  },
+  text: {
+    marginBottom: 6
+  },
+  footer: {
+    marginTop: 50,
+    textAlign: 'center',
+    fontSize: 10,
+    color: '#6b7280',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    paddingTop: 15
+  }
+});
 
 const QMSApp = () => {
   const [activeModule, setActiveModule] = useState('dashboard');
@@ -37,7 +108,8 @@ const QMSApp = () => {
 const [pendingAction, setPendingAction] = useState(null); // { type: 'approve' | 'reject', module, recordId, role, reason? }
 const [showInitiateCAPA, setShowInitiateCAPA] = useState(false);
 const [capaSource, setCapaSource] = useState(null); // { module, recordId, recordTitle }
-  
+  const [showLinkExisting, setShowLinkExisting] = useState(false);
+const [linkSource, setLinkSource] = useState(null); // { module, id, title }
   // Load data from localStorage on initial load
   const loadFromStorage = () => {
     try {
@@ -64,6 +136,363 @@ const [capaSource, setCapaSource] = useState(null); // { module, recordId, recor
       };
     }
   };
+  const RecordPDFDocument = ({ record, module }) => (
+  <Document>
+    <Page size="A4" style={styles.page}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>{formatModuleName(module)} Record Report</Text>
+        <Text style={styles.subtitle}>Quality Management System</Text>
+        <Text style={{ marginTop: 15 }}>Record ID: #{record.id}</Text>
+        <Text>Generated on: {new Date().toLocaleString()}</Text>
+      </View>
+
+      {/* Record Details */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Record Details</Text>
+        {Object.entries(record)
+          .filter(([key]) => 
+            !['approvalChain', 'attachments', 'comments', 'emailsSent', 'auditTrail', 'linkedRecords', 'id', 'createdBy'].includes(key)
+          )
+          .map(([key, value]) => (
+            <View key={key} style={{ flexDirection: 'row', marginBottom: 8 }}>
+              <Text style={{ fontWeight: 'bold', width: 160 }}>{key.replace(/([A-Z])/g, ' $1').trim()}:</Text>
+              <Text>{value || '-'}</Text>
+            </View>
+          ))}
+        <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+          <Text style={{ fontWeight: 'bold', width: 160 }}>Created By:</Text>
+          <Text>{record.createdBy || 'Current User'}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+          <Text style={{ fontWeight: 'bold', width: 160 }}>Status:</Text>
+          <Text>{record.status}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', marginBottom: 8 }}>
+          <Text style={{ fontWeight: 'bold', width: 160 }}>Approval Status:</Text>
+          <Text>{record.approvalStatus}</Text>
+        </View>
+      </View>
+
+      {/* Approval Workflow */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Approval Workflow</Text>
+        <View style={styles.table}>
+          <View style={[styles.tableRow, styles.tableHeader]}>
+            <Text style={styles.tableCell}>Role</Text>
+            <Text style={styles.tableCell}>Status</Text>
+            <Text style={styles.tableCell}>Date</Text>
+            <Text style={styles.tableCell}>Reason (if rejected)</Text>
+          </View>
+          {record.approvalChain.map((approval, idx) => (
+            <View key={idx} style={styles.tableRow}>
+              <Text style={styles.tableCell}>{approval.role}</Text>
+              <Text style={styles.tableCell}>{approval.status}</Text>
+              <Text style={styles.tableCell}>{approval.date || '-'}</Text>
+              <Text style={styles.tableCell}>{approval.reason || '-'}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* CAPA Effectiveness Check - Only for CAPA */}
+      {module === 'capa' && record.effectivenessChecked !== undefined && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>CAPA Effectiveness Check</Text>
+          <View style={styles.table}>
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, { fontWeight: 'bold', width: 180 }]}>Result</Text>
+              <Text style={styles.tableCell}>{record.effectivenessResult || 'Pending Review'}</Text>
+            </View>
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, { fontWeight: 'bold', width: 180 }]}>Due Date</Text>
+              <Text style={styles.tableCell}>{record.effectivenessDue || '-'}</Text>
+            </View>
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, { fontWeight: 'bold', width: 180 }]}>Reviewed By</Text>
+              <Text style={styles.tableCell}>{record.effectivenessReviewer || '-'}</Text>
+            </View>
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, { fontWeight: 'bold', width: 180 }]}>Review Date</Text>
+              <Text style={styles.tableCell}>{record.effectivenessDate || '-'}</Text>
+            </View>
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, { fontWeight: 'bold', width: 180 }]}>Note</Text>
+              <Text style={styles.tableCell}>{record.effectivenessNote || '-'}</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Linked Records */}
+      {record.linkedRecords?.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Linked Records (Traceability)</Text>
+          <View style={styles.table}>
+            <View style={[styles.tableRow, styles.tableHeader]}>
+              <Text style={styles.tableCell}>Module</Text>
+              <Text style={styles.tableCell}>ID</Text>
+              <Text style={styles.tableCell}>Title</Text>
+            </View>
+            {record.linkedRecords.map((link, idx) => (
+              <View key={idx} style={styles.tableRow}>
+                <Text style={styles.tableCell}>{formatModuleName(link.module)}</Text>
+                <Text style={styles.tableCell}>#{link.id}</Text>
+                <Text style={styles.tableCell}>{link.title || 'Untitled'}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Attachments */}
+      {record.attachments?.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Attachments</Text>
+          <View style={styles.table}>
+            <View style={[styles.tableRow, styles.tableHeader]}>
+              <Text style={styles.tableCell}>File Name</Text>
+              <Text style={styles.tableCell}>Size (KB)</Text>
+              <Text style={styles.tableCell}>Upload Date</Text>
+            </View>
+            {record.attachments.map((file, idx) => (
+              <View key={idx} style={styles.tableRow}>
+                <Text style={styles.tableCell}>{file.name}</Text>
+                <Text style={styles.tableCell}>{(file.size / 1024).toFixed(1)}</Text>
+                <Text style={styles.tableCell}>{file.date}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Comments */}
+      {record.comments?.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Comments & Collaboration</Text>
+          {record.comments.map((comment, idx) => (
+            <View key={idx} style={{ marginBottom: 15, padding: 10, backgroundColor: '#f9fafb', borderLeftWidth: 4, borderLeftColor: '#2563eb' }}>
+              <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>
+                {comment.author} • {comment.date}
+              </Text>
+              <Text>{comment.text}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Audit Trail */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Audit Trail</Text>
+        {record.auditTrail?.length > 0 ? (
+          <View style={styles.table}>
+            <View style={[styles.tableRow, styles.tableHeader]}>
+              <Text style={styles.tableCell}>Action</Text>
+              <Text style={styles.tableCell}>User</Text>
+              <Text style={styles.tableCell}>Timestamp</Text>
+              <Text style={styles.tableCell}>Details</Text>
+            </View>
+            {record.auditTrail.map((entry) => (
+              <View key={entry.id} style={styles.tableRow}>
+                <Text style={styles.tableCell}>{entry.action}</Text>
+                <Text style={styles.tableCell}>{entry.user}</Text>
+                <Text style={styles.tableCell}>{entry.timestamp}</Text>
+                <Text style={styles.tableCell}>{entry.details}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text>No audit history recorded.</Text>
+        )}
+      </View>
+
+      {/* Footer */}
+      <View style={styles.footer} fixed>
+        <Text>CONFIDENTIAL - FOR INTERNAL USE ONLY</Text>
+        <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+        <Text>© 2026 QMS System. All rights reserved.</Text>
+      </View>
+    </Page>
+  </Document>
+);
+
+  const CAPAReport = () => {
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredCAPAs = records.capa.filter(capa => {
+    const matchesStatus = filterStatus === 'all' || capa.status === filterStatus;
+    const matchesSearch = 
+      capa.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(capa.id).includes(searchTerm);
+    return matchesStatus && matchesSearch;
+  });
+
+  const exportToCSV = () => {
+    const headers = [
+      'ID',
+      'Title',
+      'Status',
+      'Created Date',
+      'Linked From',
+      'Effectiveness Status',
+      'Effectiveness Due',
+      'Effectiveness Result',
+      'Closed Date'
+    ];
+
+    const rows = filteredCAPAs.map(capa => [
+      capa.id,
+      capa.title || 'Untitled',
+      capa.status,
+      capa.createdDate,
+      capa.linkedRecords?.map(l => `${formatModuleName(l.module)} #${l.id}`).join('; ') || 'None',
+      capa.effectivenessChecked ? 'Completed' : capa.status === 'Effectiveness Pending' ? 'Pending' : 'Not Started',
+      capa.effectivenessDue || '-',
+      capa.effectivenessResult || '-',
+      capa.effectivenessDate || '-'
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CAPA_Report_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    addNotification('CAPA Report exported to CSV', 'success');
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
+          CAPA Report
+        </h2>
+        <button
+          onClick={exportToCSV}
+          className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow flex items-center gap-2 transition"
+        >
+          <Download className="w-5 h-5" />
+          Export to CSV
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Filter by Status
+            </label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full p-3 border rounded-lg dark:bg-gray-700"
+            >
+              <option value="all">All Status</option>
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Effectiveness Pending">Effectiveness Pending</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Search by Title or ID
+            </label>
+            <input
+              type="text"
+              placeholder="Search CAPAs..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full p-3 border rounded-lg dark:bg-gray-700"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Report Table */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+               
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Title
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Linked From
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Effectiveness
+                </th>
+              
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {filteredCAPAs.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    No CAPA records found
+                  </td>
+                </tr>
+              ) : (
+                filteredCAPAs.map(capa => (
+                  <tr key={capa.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    
+                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white max-w-md">
+                      {capa.title || 'Untitled CAPA'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        capa.status === 'Closed' ? 'bg-green-100 text-green-800' :
+                        capa.status === 'Effectiveness Pending' ? 'bg-amber-100 text-amber-800' :
+                        capa.status === 'Open' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {capa.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      {capa.linkedRecords?.length > 0
+                        ? capa.linkedRecords.map(l => `${formatModuleName(l.module)} #${l.id}`).join(', ')
+                        : 'None'}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {capa.effectivenessChecked
+                        ? <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            capa.effectivenessResult === 'Effective' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {capa.effectivenessResult}
+                          </span>
+                        : capa.status === 'Effectiveness Pending'
+                        ? <span className="text-amber-600 font-medium">Due {capa.effectivenessDue}</span>
+                        : <span className="text-gray-500">Pending Closure</span>
+                      }
+                    </td>
+                  
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
 
   const loadNotificationsFromStorage = () => {
     try {
@@ -105,7 +534,10 @@ const [capaSource, setCapaSource] = useState(null); // { module, recordId, recor
     { id: 'vendors', name: 'Vendor Qualification', icon: Users },
     { id: 'risks', name: 'Quality Risk Management', icon: Shield },
     { id: 'recalls', name: 'Product Recall', icon: AlertCircle },
-    { id: 'audits', name: 'Audit Management', icon: FileText }
+    { id: 'audits', name: 'Audit Management', icon: FileText },
+    { id: 'capa-report', name: 'CAPA Report', icon: FileBarChart },
+    { id: 'documentation', name: 'Documentation', icon: BookOpen } // NEW
+
   ];
 
   const addNotification = (message, type = 'info') => {
@@ -117,34 +549,39 @@ const [capaSource, setCapaSource] = useState(null); // { module, recordId, recor
     };
     setNotifications(prev => [notification, ...prev].slice(0, 10));
   };
-    const linkRecords = (sourceModule, sourceId, targetModule, targetId, sourceTitle,targetTitle) => {
-      console.log(`Linking records: ${sourceModule}(${sourceId}) ↔ ${targetModule}(${targetId})`);
-      setRecords(prev => {
-        const updated = { ...prev };
+ const linkRecords = (sourceModule, sourceId,  targetModule, targetId,sourceTitle, targetTitle) => {
+  setRecords(prev => {
+    const updated = { ...prev };
 
-        // Link source → target
-        updated[sourceModule] = updated[sourceModule].map(r =>
-          r.id === sourceId
-            ? { ...r, linkedRecords: [...(r.linkedRecords || []), { module: targetModule, id: targetId, title: targetTitle }] }
-            : r
-        );
+    // Find actual records for fallback titles (safety)
+    const sourceRecord = updated[sourceModule]?.find(r => r.id === sourceId);
+    const targetRecord = updated[targetModule]?.find(r => r.id === targetId);
 
-        // Link target → source (bidirectional)
-        updated[targetModule] = updated[targetModule].map(r =>
-          r.id === targetId
-            ? { ...r, linkedRecords: [...(r.linkedRecords || []), { module: sourceModule, id: sourceId, title: sourceTitle }] }
-            : r
-        );
+    const safeSourceTitle = sourceTitle || getRecordTitle(sourceRecord || {});
+    const safeTargetTitle = targetTitle || getRecordTitle(targetRecord || {});
 
-        return updated;
-      });
+    // Link source → target
+    updated[sourceModule] = updated[sourceModule].map(r =>
+      r.id === sourceId
+        ? { ...r, linkedRecords: [...(r.linkedRecords || []), { module: targetModule, id: targetId, title: safeTargetTitle }] }
+        : r
+    );
 
-      // Log to audit trail on both records
-      addAuditEntry(sourceModule, sourceId, 'Linked Record', `Linked to ${targetModule}: ${targetTitle}`);
-      addAuditEntry(targetModule, targetId, 'Linked Record', `Linked from ${sourceModule}: ${sourceTitle}`);
+    // Link target → source
+    updated[targetModule] = updated[targetModule].map(r =>
+      r.id === targetId
+        ? { ...r, linkedRecords: [...(r.linkedRecords || []), { module: sourceModule, id: sourceId, title: safeSourceTitle }] }
+        : r
+    );
 
-      addNotification(`Records linked: ${sourceModule} ↔ ${targetModule}`, 'info');
-    };
+    return updated;
+  });
+
+  addAuditEntry(sourceModule, sourceId, 'Record Linked', `Linked to ${formatModuleName(targetModule)}: ${targetTitle || 'Linked Record'}`);
+  addAuditEntry(targetModule, targetId, 'Record Linked', `Linked from ${formatModuleName(sourceModule)}: ${sourceTitle || 'Linked Record'}`);
+
+  addNotification('Records successfully linked', 'success');
+};
   const addRecord = (module, data) => {
     const newRecord = {
       id: Date.now(),
@@ -180,15 +617,41 @@ const [capaSource, setCapaSource] = useState(null); // { module, recordId, recor
     return newRecord
   };
 
-  const updateRecordStatus = (module, id, newStatus) => {
-    setRecords(prev => ({
-      ...prev,
-      [module]: prev[module].map(r => r.id === id ? {...r, status: newStatus} : r)
-    }));
-    addNotification(`Record status updated to ${newStatus}`, 'info');
-    addAuditEntry(module, id, 'Status Changed', `Status changed to  → ${newStatus}`);
-  };
+ const updateRecordStatus = (module, id, newStatus) => {
+  let oldStatus = '';
+  setRecords(prev => ({
+    ...prev,
+    [module]: prev[module].map(r => {
+      if (r.id === id) {
+        oldStatus = r.status;
 
+        // Special handling for CAPA closure
+        if (module === 'capa' && newStatus === 'Closed' && oldStatus !== 'Closed') {
+          const effectivenessDue = new Date();
+          effectivenessDue.setDate(effectivenessDue.getDate() + 30); // 30 days default
+
+          return {
+            ...r,
+            status: 'Effectiveness Pending',
+            effectivenessDueDate: effectivenessDue.toLocaleDateString(),
+            effectivenessChecked: false
+          };
+        }
+
+        return { ...r, status: newStatus };
+      }
+      return r;
+    })
+  }));
+
+
+  const statusMessage = module === 'capa' && newStatus === 'Closed' 
+    ? 'Closed → Effectiveness Check Scheduled' 
+    : `to ${newStatus}`;
+
+  addNotification(`Record status updated ${statusMessage}`, 'info');
+  addAuditEntry(module, id, 'Status Changed', `Status changed from ${oldStatus} → ${newStatus}`);
+};
   const addAttachment = (module, recordId, file) => {
     setRecords(prev => ({
       ...prev,
@@ -243,6 +706,30 @@ const [capaSource, setCapaSource] = useState(null); // { module, recordId, recor
   }));
 };
 
+
+
+  const performEffectivenessCheck = (capaId, isEffective, reviewerNote = '', signer = 'Current User') => {
+  setRecords(prev => ({
+    ...prev,
+    capa: prev.capa.map(r =>
+      r.id === capaId
+        ? {
+            ...r,
+            status: isEffective ? 'Closed' : 'Open',
+            effectivenessChecked: true,
+            effectivenessResult: isEffective ? 'Effective' : 'Ineffective',
+            effectivenessNote: reviewerNote,
+            effectivenessDate: new Date().toLocaleDateString(),
+            effectivenessReviewer: signer
+          }
+        : r
+    )
+  }));
+
+  const result = isEffective ? 'Effective' : 'Ineffective (CAPA Re-opened)';
+  addNotification(`CAPA Effectiveness: ${result}`, isEffective ? 'success' : 'warning');
+  addAuditEntry('capa', capaId, 'Effectiveness Check', `${result} - Note: ${reviewerNote || 'None'} (Signed by ${signer})`, signer);
+};
   const approveRecord = (module, recordId, approverRole,signer) => {
     setRecords(prev => ({
       ...prev,
@@ -572,13 +1059,32 @@ console.log('Monthly Counts:', monthlyCounts);
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-500 to-emerald-600 dark:from-green-600 dark:to-emerald-700 rounded-xl shadow-lg p-8 text-white text-center">
-            <h3 className="text-2xl font-bold mb-4">Compliance Score</h3>
-            <div className="text-6xl font-bold mb-2">
-              {Math.round((completedRecords / (completedRecords + pendingApprovals + openComplaints || 1)) * 100)}%
-            </div>
-            <p className="text-white/90">Excellent performance</p>
-          </div>
+              <div 
+        className={`rounded-xl shadow-lg p-8 text-white text-center transition-all duration-500 ${
+          (() => {
+            const rate = Math.round((completedRecords / (completedRecords + openComplaints + activeCAPAs + pendingApprovals + overdueAudits || 1)) * 100);
+            if (rate >= 90) return 'bg-gradient-to-br from-green-500 to-emerald-600 dark:from-green-600 dark:to-emerald-700';
+            if (rate >= 70) return 'bg-gradient-to-br from-yellow-500 to-amber-600 dark:from-yellow-600 dark:to-amber-700';
+            return 'bg-gradient-to-br from-red-500 to-rose-600 dark:from-red-600 dark:to-rose-700';
+          })()
+        }`}
+      >
+        <h3 className="text-2xl font-bold mb-4">Compliance Score</h3>
+        <div className="text-6xl font-bold mb-2">
+          {(() => {
+            const rate = Math.round((completedRecords / (completedRecords + openComplaints + activeCAPAs + pendingApprovals + overdueAudits || 1)) * 100);
+            return rate;
+          })()}%
+        </div>
+        <p className="text-white/90 text-lg">
+          {(() => {
+            const rate = Math.round((completedRecords / (completedRecords + openComplaints + activeCAPAs + pendingApprovals + overdueAudits || 1)) * 100);
+            if (rate >= 90) return 'Excellent performance – Keep it up!';
+            if (rate >= 70) return 'Good performance – Room for improvement';
+            return 'Needs attention – Review open items urgently';
+          })()}
+        </p>
+</div>
         </div>
       </div>
     </div>
@@ -623,20 +1129,7 @@ const MetricCard = ({ title, value, trend, trendUp, color, icon: Icon, bgGradien
   );
 };
 
-  const StatCard = ({ title, value, color }) => {
-    const colors = {
-      red: 'bg-red-50 text-red-600',
-      blue: 'bg-blue-50 text-blue-600',
-      yellow: 'bg-yellow-50 text-yellow-600',
-      green: 'bg-green-50 text-green-600'
-    };
-    return (
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-sm font-medium text-gray-600">{title}</h3>
-        <p className={`text-3xl font-bold mt-2 ${colors[color]}`}>{value}</p>
-      </div>
-    );
-  };
+
   const renderRecordDetails = (record) => {
   const excludeKeys = [
     'approvalChain',
@@ -669,6 +1162,15 @@ const MetricCard = ({ title, value, trend, trendUp, color, icon: Icon, bgGradien
       );
     });
 };
+const getRecordTitle = (record) => {
+  return record.title || 
+         record.testName || 
+         record.vendorName || 
+         record.riskTitle || 
+         record.productName || 
+         record.auditTitle || 
+         `Record #${record.id}`;
+};
 
 const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPendingAction }) => {
   console.log('ReRendering RecordDetailModal for record:', record);
@@ -676,6 +1178,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
   const [comment, setComment] = useState('');
   const [emailRecipient, setEmailRecipient] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
+
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -694,6 +1197,20 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
               {record.createdDate} • Created by {record.createdBy}
             </p>
           </div>
+         <PDFDownloadLink
+  document={<RecordPDFDocument record={record} module={module} />}
+  fileName={`${module.toUpperCase()}_Record_${record.id}_${new Date().toISOString().slice(0,10)}.pdf`}
+>
+  {({ loading }) => (
+    <button
+      disabled={loading}
+      className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium rounded-lg shadow flex items-center gap-2 transition"
+    >
+      <Download className="w-5 h-5" />
+      {loading ? 'Generating...' : 'Export PDF'}
+    </button>
+  )}
+</PDFDownloadLink>
           <button 
             onClick={onClose} 
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition"
@@ -741,6 +1258,75 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
               <p className="text-2xl font-bold text-blue-600">{record.attachments.length}</p>
             </div>
           </div>
+          {/* CAPA Effectiveness Check - Only for CAPA module */}
+          {module === 'capa' && (
+            <div className={`rounded-xl p-6 border ${record.status === 'Effectiveness Pending' ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'}`}>
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <CheckCircle className={`w-6 h-6 ${record.status === 'Effectiveness Pending' ? 'text-amber-600' : 'text-green-600'}`} />
+                CAPA Effectiveness Check
+              </h3>
+
+              {record.effectivenessChecked ? (
+                <div className="space-y-3">
+                  <p className="font-medium">
+                    Result: <span className={`px-3 py-1 rounded-full text-sm ${record.effectivenessResult === 'Effective' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {record.effectivenessResult}
+                    </span>
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Reviewed on: {record.effectivenessDate} by {record.effectivenessReviewer}
+                  </p>
+                  {record.effectivenessNote && (
+                    <p className="text-sm italic text-gray-700 dark:text-gray-300">
+                      Note: {record.effectivenessNote}
+                    </p>
+                  )}
+                </div>
+              ) : record.status === 'Effectiveness Pending' ? (
+                <div className="space-y-4">
+                  <p className="text-amber-800 dark:text-amber-300 font-medium">
+                    Effectiveness review due by: <strong>{record.effectivenessDueDate}</strong>
+                  </p>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => {
+                        setPendingAction({
+                          type: 'effectiveness',
+                          capaId: record.id,
+                          isEffective: true
+                        });
+                        setShowESignature(true);
+                      }}
+                      className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow transition"
+                    >
+                      Mark as Effective
+                    </button>
+                    <button
+                      onClick={() => {
+                        const note = prompt('Why is this CAPA ineffective? (Required for re-opening)');
+                        if (note && note.trim()) {
+                          setPendingAction({
+                            type: 'effectiveness',
+                            capaId: record.id,
+                            isEffective: false,
+                            note: note.trim()
+                          });
+                          setShowESignature(true);
+                        }
+                      }}
+                      className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow transition"
+                    >
+                      Mark as Ineffective
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-600 dark:text-gray-400">
+                  Effectiveness check will be scheduled upon closure.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Approval Workflow - Now with E-Signature Required */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 overflow-x-auto">
@@ -907,6 +1493,26 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
               )}
             </div>
           )}
+          {/* Link to Existing Record Button */}
+            <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-xl p-6 border border-indigo-200 dark:border-indigo-800">
+              <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-300 mb-4">
+                Link to Existing Record
+              </h3>
+              <button
+                onClick={() => {
+                  const sourceTitle = record.title || record.testName || record.vendorName || `Record #${record.id}`;
+                  setLinkSource({
+                    module,
+                    id: record.id,
+                    title: sourceTitle
+                  });
+                  setShowLinkExisting(true);
+                }}
+                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow transition"
+              >
+                Link to Existing Record
+              </button>
+            </div>
 
           {/* Attachments Section */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -1097,8 +1703,16 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
           </div>
         </div>
       </div>
+     
+
     </div>
   );
+};
+
+const handleLinkExisting = (targetModule, targetId, targetTitle) => {
+  linkRecords(linkSource.module, linkSource.id, targetModule, targetId,linkSource.title, targetTitle);
+  setShowLinkExisting(false);
+  setLinkSource(null);
 };
 const handleInitiateCAPA = (capaData) => {
   const newCapaRecord = addRecord('capa', capaData);
@@ -1108,6 +1722,7 @@ const handleInitiateCAPA = (capaData) => {
     capaSource.recordId,
     'capa',
     newCapaRecord.id,
+    capaSource.title || capaSource.testName,
     newCapaRecord.title
   );
 
@@ -2169,21 +2784,23 @@ const VendorModule = () => {
 const handleESignatureConfirm = (signatureData) => {
   if (!pendingAction) return;
 
-  const { type, module, recordId, role, reason } = pendingAction;
   const signer = signatureData.username;
 
-  if (type === 'approve') {
-    approveRecord(module, recordId, role,signer);
-    addNotification(`Record approved by ${role} (Signed by: ${signatureData.username})`, 'success');
-  } else if (type === 'reject') {
-    rejectRecord(module, recordId, role, reason || 'No reason provided',signer);
-    addNotification(`Record rejected by ${role} (Signed by: ${signatureData.username})`, 'warning');
+  if (pendingAction.type === 'approve') {
+    approveRecord(pendingAction.module, pendingAction.recordId, pendingAction.role, signer);
+  } else if (pendingAction.type === 'reject') {
+    rejectRecord(pendingAction.module, pendingAction.recordId, pendingAction.role, pendingAction.reason || '', signer);
+  } else if (pendingAction.type === 'effectiveness') {
+    performEffectivenessCheck(
+      pendingAction.capaId,
+      pendingAction.isEffective,
+      pendingAction.note || '',
+      signer
+    );
   }
 
-  // Optional: You can store signature info later in the record if needed
-  console.log('E-Signature recorded:', { ...signatureData, action: type, role });
+  addNotification(`${pendingAction.type === 'effectiveness' ? 'Effectiveness check' : 'Action'} completed with e-signature`, 'success');
 
-  // Close modal and reset
   setShowESignature(false);
   setPendingAction(null);
 };
@@ -2283,6 +2900,312 @@ const InitiateCAPAModal = ({ source, onConfirm, onCancel }) => {
     </div>
   );
 };
+const LinkExistingModal = ({ sourceModule, sourceId, sourceTitle, onConfirm, onCancel }) => {
+  const [selectedModule, setSelectedModule] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRecord, setSelectedRecord] = useState(null); // For confirmation step
+
+  const targetModules = modules
+    .map(m => m.id)
+    .filter(m => m !== sourceModule && m !== 'dashboard');
+
+  const filteredRecords = selectedModule 
+    ? records[selectedModule]?.filter(r => 
+        r.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.testName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.vendorName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(r.id).includes(searchTerm)
+      ) || []
+    : [];
+
+  const handleSelect = (record) => {
+    setSelectedRecord({
+      module: selectedModule,
+      id: record.id,
+      title: getRecordTitle(record)
+    });
+  };
+
+  const handleConfirmLink = () => {
+    if (!selectedRecord) return;
+      onConfirm(selectedRecord.module, selectedRecord.id, selectedRecord.title);
+    
+  };
+
+  const handleBack = () => {
+    setSelectedRecord(null);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onCancel}>
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200 dark:border-gray-700"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b px-6 py-4 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+            {selectedRecord ? 'Confirm Link' : 'Link to Existing Record'}
+          </h3>
+          <button onClick={onCancel} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <p className="text-gray-600 dark:text-gray-400">
+            Linking <strong>{sourceTitle || 'this record'}</strong> ({sourceModule})
+          </p>
+
+          {!selectedRecord ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Module
+                </label>
+                <select
+                  className="w-full p-3 border rounded-lg dark:bg-gray-700"
+                  value={selectedModule}
+                  onChange={(e) => setSelectedModule(e.target.value)}
+                >
+                  <option value="">Choose module...</option>
+                  {targetModules.map(mod => (
+                    <option key={mod} value={mod}>
+                      {formatModuleName(mod)}s
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedModule && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Search Records
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Search by title or ID..."
+                      className="w-full p-3 border rounded-lg dark:bg-gray-700"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="max-h-96 overflow-y-auto border rounded-lg">
+                    {filteredRecords.length === 0 ? (
+                      <p className="text-center text-gray-500 py-8">No records found</p>
+                    ) : (
+                      <div className="divide-y">
+                        {filteredRecords.map(record => (
+                          <button
+                            key={record.id}
+                            onClick={() => handleSelect(record)}
+                            className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                          >
+                            <p className="font-medium text-gray-800 dark:text-gray-100">
+                              {record.title || record.testName || record.vendorName || record.riskTitle || record.productName || record.auditTitle || 'Unititled Record'}
+
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              ID: {record.id} • Status: {record.status} • Created: {record.createdDate}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            /* Confirmation Step */
+            <div className="space-y-6">
+              <div className="bg-blue-50 dark:bg-blue-900/30 p-6 rounded-lg border border-blue-200 dark:border-blue-800">
+                <h4 className="font-semibold text-blue-800 dark:text-blue-300 mb-3">
+                  You are linking:
+                </h4>
+                <div className="space-y-2">
+                  <p><strong>From:</strong> {sourceTitle} ({sourceModule.toUpperCase()})</p>
+                  <p><strong>To:</strong> {selectedRecord.title} ({selectedRecord.module.toUpperCase()} ID: {selectedRecord.id})</p>
+                </div>
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-4">
+                  This creates a permanent bidirectional link visible in both records and audit trail.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={handleBack}
+                  className="px-6 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleConfirmLink}
+                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                >
+                  Confirm & Link
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+const Documentation = () => {
+  return (
+    <div className="space-y-10 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="text-center mb-12">
+        <h1 className="text-5xl font-bold text-gray-800 dark:text-gray-100 mb-4">
+          Atachi QMS  Documentation
+        </h1>
+        <p className="text-xl text-gray-600 dark:text-gray-400">
+          Quick guide to features, processes, and compliance
+        </p>
+       
+      </div>
+
+      {/* Introduction Card */}
+      <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl shadow-2xl p-10 text-white">
+        <h2 className="text-3xl font-bold mb-6">Welcome to ATACHI QMS</h2>
+        <p className="text-lg leading-relaxed">
+          A modern, fully digital Quality Management System designed for regulated industries 
+          (pharmaceuticals, medical devices, biotech). Supports end-to-end quality processes 
+          with full traceability, electronic signatures, and audit-ready reporting.
+        </p>
+      </div>
+
+      {/* Core Features */}
+      <section className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-200 dark:border-gray-700 p-10">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-8 flex items-center gap-4">
+          <CheckCircle className="w-10 h-10 text-green-500" />
+          Core Features
+        </h2>
+        <div className="grid md:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-3">
+                Closed-Loop CAPA Management
+              </h3>
+              <ul className="space-y-2 text-gray-700 dark:text-gray-300">
+                <li>• Initiate from Complaints/OOT</li>
+                <li>• Root cause & corrective/preventive actions</li>
+                <li>• Multi-level e-signature approval</li>
+                <li>• Automatic 30-day effectiveness check</li>
+                <li>• Re-open if ineffective</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-indigo-600 dark:text-indigo-400 mb-3">
+                Bidirectional Traceability
+              </h3>
+              <ul className="space-y-2 text-gray-700 dark:text-gray-300">
+                <li>• Auto-link on CAPA initiation</li>
+                <li>• Manual linking to existing records</li>
+                <li>• Traceability Matrix with navigation</li>
+                <li>• Full deviation-to-resolution visibility</li>
+              </ul>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xl font-semibold text-purple-600 dark:text-purple-400 mb-3">
+                Compliance & Security
+              </h3>
+              <ul className="space-y-2 text-gray-700 dark:text-gray-300">
+                <li>• 21 CFR Part 11 electronic signatures</li>
+                <li>• Complete audit trail</li>
+                <li>• PDF exports with confidentiality footer</li>
+                <li>• Dark mode support</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-3">
+                Reporting & Export
+              </h3>
+              <ul className="space-y-2 text-gray-700 dark:text-gray-300">
+                <li>• Individual record PDF export</li>
+                <li>• CAPA Report with filters & CSV</li>
+                <li>• Professional audit-ready formatting</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Module Overview Table */}
+      <section className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-200 dark:border-gray-700 p-10 overflow-x-auto">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-8">
+          Module Overview
+        </h2>
+        <table className="w-full min-w-max">
+          <thead className="bg-gray-100 dark:bg-gray-700">
+            <tr>
+              <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 dark:text-gray-300">Module</th>
+              <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 dark:text-gray-300">Purpose</th>
+              <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 dark:text-gray-300">Key Fields</th>
+              <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 dark:text-gray-300">Status Flow</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            <tr>
+              <td className="px-6 py-4 font-medium">Market Complaints</td>
+              <td className="px-6 py-4">Customer/product feedback</td>
+              <td className="px-6 py-4">Title, Description, Severity, Product</td>
+              <td className="px-6 py-4">Open → In Progress → Closed</td>
+            </tr>
+            <tr>
+              <td className="px-6 py-4 font-medium">CAPA</td>
+              <td className="px-6 py-4">Corrective & Preventive Actions</td>
+              <td className="px-6 py-4">Title, Root Cause, Actions</td>
+              <td className="px-6 py-4">Open → Closed → Effectiveness → Closed</td>
+            </tr>
+            <tr>
+              <td className="px-6 py-4 font-medium">OOT</td>
+              <td className="px-6 py-4">Lab/test deviations</td>
+              <td className="px-6 py-4">Test Name, Result, Specification</td>
+              <td className="px-6 py-4">Open → In Progress → Closed</td>
+            </tr>
+            <tr>
+              <td className="px-6 py-4 font-medium">Audit Management</td>
+              <td className="px-6 py-4">Internal/external audits</td>
+              <td className="px-6 py-4">Title, Type, Date, Auditor</td>
+              <td className="px-6 py-4">Scheduled → In Progress → Closed</td>
+            </tr>
+            {/* Add other modules as needed */}
+          </tbody>
+        </table>
+      </section>
+
+      {/* Process Flow */}
+      <section className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl shadow-2xl p-10 text-white">
+        <h2 className="text-3xl font-bold mb-8">Typical Process Flow</h2>
+        <ol className="space-y-6 text-lg">
+          <li>1. Log a Market Complaint or OOT</li>
+          <li>2. Initiate CAPA → auto-linked</li>
+          <li>3. Complete root cause & actions</li>
+          <li>4. Multi-level approval (e-signatures)</li>
+          <li>5. Close CAPA → 30-day effectiveness check scheduled</li>
+          <li>6. Reviewer confirms effectiveness</li>
+          <li>7. Export full report for audit</li>
+        </ol>
+      </section>
+
+      {/* Footer */}
+      <div className="text-center py-12 border-t-2 border-gray-300 dark:border-gray-700">
+        <p className="text-lg font-bold text-gray-800 dark:text-gray-100">
+          CONFIDENTIAL - FOR INTERNAL USE ONLY
+        </p>
+        <p className="text-gray-600 dark:text-gray-400 mt-4">
+          © 2026 QMS Pro. All rights reserved.
+        </p>
+      </div>
+    </div>
+  );
+};
   const renderModule = () => {
     switch(activeModule) {
       case 'dashboard': return <Dashboard />;
@@ -2293,6 +3216,8 @@ const InitiateCAPAModal = ({ source, onConfirm, onCancel }) => {
       case 'risks': return <RiskModule />;
       case 'recalls': return <RecallModule />;
       case 'audits': return <AuditModule />;
+      case 'capa-report': return <CAPAReport />;
+      case 'documentation': return <Documentation />;
       default: return <Dashboard />;
     }
   };
@@ -2300,10 +3225,15 @@ const InitiateCAPAModal = ({ source, onConfirm, onCancel }) => {
   return (
     <div className="flex h-screen bg-gray-100">
       <div className="w-64 bg-gray-900 text-white p-4">
-        <h1 className="text-xl font-bold mb-8 flex items-center gap-2">
-          <Shield className="w-6 h-6" />
-          QMS System
-        </h1>
+     
+        <div className="flex items-center gap-0 mb-10">
+    <img 
+      src="https://atachisystems.com/atachi_logo.png" 
+      alt="Company Logo" 
+      className="w-21 h-20 rounded-xl shadow-lg"
+    />
+          <b><h1 className="text-2xl font-bold"> QMS</h1></b>
+  </div>
         <nav className="space-y-2">
           {modules.map(module => {
             const Icon = module.icon;
@@ -2378,13 +3308,32 @@ const InitiateCAPAModal = ({ source, onConfirm, onCancel }) => {
     }}
   />
 )}
-        {showESignature && pendingAction && (
+{showESignature && pendingAction && (
   <ESignatureModal
-    action={pendingAction.type === 'approve' ? 'Approve' : 'Reject'}
+    action={
+      pendingAction.type === 'approve' ? 'Approve' :
+      pendingAction.type === 'reject' ? 'Reject' :
+      pendingAction.type === 'effectiveness' 
+        ? (pendingAction.isEffective ? 'Mark as Effective' : 'Mark as Ineffective')
+        : 'Confirm Action'
+    }
     onConfirm={handleESignatureConfirm}
     onCancel={() => {
       setShowESignature(false);
       setPendingAction(null);
+    }}
+  />
+)}
+{/* Link to Existing Record Modal */}
+{showLinkExisting && linkSource && (
+  <LinkExistingModal
+    sourceModule={linkSource.module}
+    sourceId={linkSource.id}
+    sourceTitle={linkSource.title}
+    onConfirm={handleLinkExisting}
+    onCancel={() => {
+      setShowLinkExisting(false);
+      setLinkSource(null);
     }}
   />
 )}
