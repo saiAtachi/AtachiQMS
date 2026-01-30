@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation
 import FishboneDiagram from './components/FishboneDiagram';
 import EditableFishbone from './components/EditableFishbone';
 
-import { AlertCircle, CheckCircle,BookOpen, Clock, FileText, Users, TrendingUp, AlertTriangle, Shield, Upload, Mail, UserCheck, X, Download, Bell, Link as LinkIcon, FileBarChart } from 'lucide-react';
+import { AlertCircle, CheckCircle,BookOpen, Clock, FileText, Users, TrendingUp, AlertTriangle, Shield, Upload, Mail, UserCheck, X, Download, Bell, Link as  FileBarChart } from 'lucide-react';
 import {
   Chart as ChartJS,
   CategoryScale,
