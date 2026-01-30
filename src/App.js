@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
+import FishboneDiagram from './components/FishboneDiagram';
+import EditableFishbone from './components/EditableFishbone';
 
-import { AlertCircle, CheckCircle,BookOpen, Clock, FileText, Users, TrendingUp, AlertTriangle, Shield, Upload, Mail, UserCheck, X, Download, Bell, Link, FileBarChart } from 'lucide-react';
+import { AlertCircle, CheckCircle,BookOpen, Clock, FileText, Users, TrendingUp, AlertTriangle, Shield, Upload, Mail, UserCheck, X, Download, Bell, Link as LinkIcon, FileBarChart } from 'lucide-react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -102,8 +105,42 @@ const styles = StyleSheet.create({
   }
 });
 
+// Navigation Links Component using React Router
+const NavigationLinks = ({ modules }) => {
+  const location = useLocation();
+
+  const getActiveModule = () => {
+    const path = location.pathname.split('/')[1] || 'dashboard';
+    return path;
+  };
+
+  const activeModule = getActiveModule();
+
+  return (
+    <>
+      {modules.map(module => {
+        const Icon = module.icon;
+        const path = module.id === 'dashboard' ? '/' : `/${module.id}`;
+        return (
+          <Link
+            key={module.id}
+            to={path}
+            className={`w-full flex items-center gap-3 p-3 rounded transition ${
+              activeModule === module.id
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300 hover:bg-gray-800'
+            }`}
+          >
+            <Icon className="w-5 h-5" />
+            <span className="text-sm">{module.name}</span>
+          </Link>
+        );
+      })}
+    </>
+  );
+};
+
 const QMSApp = () => {
-  const [activeModule, setActiveModule] = useState('dashboard');
   const [showESignature, setShowESignature] = useState(false);
 const [pendingAction, setPendingAction] = useState(null); // { type: 'approve' | 'reject', module, recordId, role, reason? }
 const [showInitiateCAPA, setShowInitiateCAPA] = useState(false);
@@ -121,7 +158,8 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
         vendors: [],
         risks: [],
         recalls: [],
-        audits: []
+        audits: [],
+        rca:[]
       };
     } catch (error) {
       console.error('Error loading from storage:', error);
@@ -132,7 +170,8 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
         vendors: [],
         risks: [],
         recalls: [],
-        audits: []
+        audits: [],
+        rca:[]
       };
     }
   };
@@ -154,7 +193,7 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
         <Text style={styles.sectionTitle}>Record Details</Text>
         {Object.entries(record)
           .filter(([key]) => 
-            !['approvalChain', 'attachments', 'comments', 'emailsSent', 'auditTrail', 'linkedRecords', 'id', 'createdBy'].includes(key)
+            !['approvalChain', 'attachments', 'comments', 'emailsSent', 'auditTrail', 'fishbone','linkedRecords', 'id', 'createdBy'].includes(key)
           )
           .map(([key, value]) => (
             <View key={key} style={{ flexDirection: 'row', marginBottom: 8 }}>
@@ -162,6 +201,7 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
               <Text>{value || '-'}</Text>
             </View>
           ))}
+
         <View style={{ flexDirection: 'row', marginBottom: 8 }}>
           <Text style={{ fontWeight: 'bold', width: 160 }}>Created By:</Text>
           <Text>{record.createdBy || 'Current User'}</Text>
@@ -175,6 +215,68 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
           <Text>{record.approvalStatus}</Text>
         </View>
       </View>
+      {module === 'rca' && record.fishbone && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Root Cause Analysis – Fishbone</Text>
+
+          <View style={{ marginBottom: 10 }}>
+            <Text style={{ fontWeight: 'bold' }}>Problem Statement:</Text>
+            <Text style={{ marginTop: 4 }}>{record.fishbone.problemStatement || 'Not specified'}</Text>
+          </View>
+
+          <Text style={{ fontWeight: 'bold', marginTop: 12 }}>Categories:</Text>
+
+          {record.fishbone.categories?.map((cat) => (
+            <View key={cat.id} style={{ marginTop: 8 }}>
+              <Text style={{ fontWeight: 'bold', color: cat.color || '#000' }}>
+                {cat.name}
+              </Text>
+
+              {cat.causes?.length > 0 ? (
+                cat.causes.map((cause) => (
+                  <Text key={cause.id} style={{ marginLeft: 12, marginTop: 4 }}>
+                    • {cause.text}
+                    {cause.severity ? ` (${cause.severity})` : ''}
+                  </Text>
+                ))
+              ) : (
+                <Text style={{ fontStyle: 'italic', marginLeft: 12, marginTop: 4 }}>
+                  No causes recorded
+                </Text>
+              )}
+            </View>
+          ))}
+
+          {record.fishbone.selectedRootCauses?.length > 0 && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={{ fontWeight: 'bold' }}>Selected Root Causes:</Text>
+              {record.fishbone.selectedRootCauses.map((causeId) => {
+                // Find matching cause text
+                let causeText = 'Unknown cause';
+                for (const cat of record.fishbone.categories || []) {
+                  const found = cat.causes?.find(c => c.id === causeId);
+                  if (found) {
+                    causeText = `${cat.name}: ${found.text}`;
+                    break;
+                  }
+                }
+                return (
+                  <Text key={causeId} style={{ marginLeft: 12, marginTop: 4 }}>
+                    • {causeText}
+                  </Text>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={{ marginTop: 12 }}>
+            <Text style={{ fontWeight: 'bold' }}>Locked:</Text>
+            <Text>
+              {record.fishbone.locked ? `Yes (by ${record.fishbone.lockedBy || '—'} on ${record.fishbone.lockedDate || '—'})` : 'No'}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* Approval Workflow */}
       <View style={styles.section}>
@@ -519,7 +621,7 @@ useEffect(() => {
     const sampleData = {
   complaints: [
     {
-      id: 1001,
+      id: "1001",
       title: "Packaging Leakage - Batch XYZ123",
       description: "Customer reported leakage from damaged packaging during transit. Potential contamination risk.",
       severity: "Critical",
@@ -532,7 +634,7 @@ useEffect(() => {
       comments: [
         { author: "QA Team", date: "2025-12-16", text: "Investigation initiated. Lab testing requested." }
       ],
-      linkedRecords: [{ module: "capa", id: 2001, title: "CAPA-2026-001: Improve Packaging Strength" }],
+      linkedRecords: [{ module: "capa", id: "2001", title: "CAPA-2026-001: Improve Packaging Strength" }],
       approvalChain: [
         { role: "QA Manager", status: "Approved", date: "2025-12-20" },
         { role: "Department Head", status: "Pending", date: null },
@@ -543,34 +645,11 @@ useEffect(() => {
         { action: "Comment Added", user: "QA Team", timestamp: "2025-12-16 14:20", details: "Comment: Investigation initiated..." }
       ],
       emailsSent: []
-    },
-    {
-      id: 1002,
-      title: "Labeling Error on Batch ABC456",
-      description: "Incorrect expiry date printed on labels. Regulatory non-compliance risk.",
-      severity: "High",
-      product: "Product XYZ - 250mg Capsules",
-      status: "Open",
-      approvalStatus: "Pending",
-      createdDate: "2025-12-28",
-      createdBy: "Current User",
-      attachments: [],
-      comments: [],
-      linkedRecords: [],
-      approvalChain: [
-        { role: "QA Manager", status: "Pending", date: null },
-        { role: "Department Head", status: "Pending", date: null },
-        { role: "Quality Director", status: "Pending", date: null }
-      ],
-      auditTrail: [
-        { action: "Record Created", user: "Current User", timestamp: "2025-12-28 09:15", details: "New complaint initiated" }
-      ],
-      emailsSent: []
     }
   ],
   capa: [
     {
-      id: 2001,
+      id: "2001",
       title: "CAPA-2026-001: Improve Packaging Strength",
       rootCause: "Insufficient cushioning and weak seal strength identified.",
       correctiveAction: "Update packaging spec: double-layer bubble wrap + reinforced seals.",
@@ -581,7 +660,7 @@ useEffect(() => {
       createdBy: "Current User",
       effectivenessDueDate: "2026-01-17",
       effectivenessChecked: false,
-      linkedRecords: [{ module: "complaints", id: 1001, title: "Packaging Leakage - Batch XYZ123" }],
+      linkedRecords: [{ module: "complaints", id: "1001", title: "Packaging Leakage - Batch XYZ123" }],
       approvalChain: [
         { role: "QA Manager", status: "Approved", date: "2025-12-20" },
         { role: "Department Head", status: "Approved", date: "2025-12-22" },
@@ -598,7 +677,7 @@ useEffect(() => {
   ],
   audits: [
     {
-      id: 3001,
+      id: "3001",
       auditTitle: "Annual GMP Audit 2026",
       auditType: "Internal",
       auditDate: "2026-03-15",
@@ -623,7 +702,7 @@ useEffect(() => {
   ],
   oot: [
     {
-      id: 4001,
+      id: "4001",
       testName: "Dissolution Test - Batch DEF789",
       result: "78%",
       specification: "80-120%",
@@ -648,7 +727,7 @@ useEffect(() => {
   ],
   vendors: [
     {
-      id: 5001,
+      id: "5001",
       vendorName: "Packaging Solutions Inc.",
       category: "Primary Packaging",
       qualificationStatus: "Qualified",
@@ -673,7 +752,7 @@ useEffect(() => {
   ],
   risks: [
     {
-      id: 6001,
+      id: "6001",
       riskTitle: "Supply Chain Disruption Risk",
       probability: "Medium",
       severity: "High",
@@ -698,9 +777,346 @@ useEffect(() => {
       emailsSent: []
     }
   ],
+  rca: [
+  {
+  id: "8001",
+  title: "Batch Number Labelling Error – Batch LAB-ERR-3921",
+  problemStatement: "Batch number printed on secondary packaging (cartons) does not match the actual batch number assigned in the batch manufacturing record (BMR). Printed: LAB-ERR-3921 vs Actual: LAB-ERR-3920. Risk of product mix-up and regulatory non-compliance.",
+  processArea: "Secondary Packaging / Labelling",
+  status: "Open",
+  approvalStatus: "Pending",
+  createdDate: "2026-01-30",
+  createdBy: "Current User",
+  fishbone: {
+    version: "2.0",
+    problemStatement: "Batch number printed on secondary packaging does not match actual batch number (LAB-ERR-3921 vs LAB-ERR-3920)",
+    categories: [
+      {
+        id: 'cat-1',
+        name: 'Man',
+        color: '#3b82f6',
+        order: 0,
+        causes: [
+          {
+            id: 'cause-1769769173599',
+            text: 'Operator entered wrong batch number during label setup',
+            description: '',
+            severity: 'high',
+            order: 0,
+            subCauses: []
+          },
+          {
+            id: 'cause-1769769339167',
+            text: 'No second-person verification of label artwork/data',
+            description: '',
+            severity: 'high',
+            order: 1,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-2',
+        name: 'Machine',
+        color: '#10b981',
+        order: 1,
+        causes: [
+          {
+            id: 'cause-1769769182247',
+            text: 'Labelling machine software did not auto-populate from BMR',
+            description: '',
+            severity: 'medium',
+            order: 0,
+            subCauses: []
+          },
+          {
+            id: 'cause-1769769182248',
+            text: 'Printer calibration drift causing misprint',
+            description: '',
+            severity: 'medium',
+            order: 1,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-3',
+        name: 'Method',
+        color: '#f59e0b',
+        order: 2,
+        causes: [
+          {
+            id: 'cause-1769769190960',
+            text: 'SOP lacks mandatory double-check step for batch number entry',
+            description: '',
+            severity: 'high',
+            order: 0,
+            subCauses: []
+          },
+          {
+            id: 'cause-1769769190961',
+            text: 'No barcode scanning validation during labelling',
+            description: '',
+            severity: 'high',
+            order: 1,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-4',
+        name: 'Material',
+        color: '#8b5cf6',
+        order: 3,
+        causes: [
+          {
+            id: 'cause-1769769202847',
+            text: 'Pre-printed label roll with incorrect batch number used by mistake',
+            description: '',
+            severity: 'high',
+            order: 0,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-5',
+        name: 'Measurement',
+        color: '#ec4899',
+        order: 4,
+        causes: [
+          {
+            id: 'cause-1769769210960',
+            text: 'No in-process check of printed labels against BMR',
+            description: '',
+            severity: 'medium',
+            order: 0,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-6',
+        name: 'Environment',
+        color: '#14b8a6',
+        order: 5,
+        causes: [
+          {
+            id: 'cause-1769769218960',
+            text: 'Poor lighting in labelling area leading to data entry error',
+            description: '',
+            severity: 'low',
+            order: 0,
+            subCauses: []
+          }
+        ]
+      }
+    ],
+    locked: false,
+    lockedBy: null,
+    lockedDate: null,
+    selectedRootCauses: []
+  },
+  rootCauseConclusion: '',
+  linkedRecords: [
+   
+  ],
+  approvalChain: [
+    { role: "QA Manager", status: "Pending", date: null },
+    { role: "Department Head", status: "Pending", date: null },
+    { role: "Quality Director", status: "Pending", date: null }
+  ],
+  attachments: [],
+  comments: [],
+  emailsSent: [],
+  auditTrail: [
+    {
+      action: "Record Created",
+      user: "Current User",
+      timestamp: "2026-01-30 10:45",
+      details: "Labelling error RCA initiated due to potential mix-up risk"
+    }
+  ]
+},
+  {
+  id: "8002",
+  title: "Foreign Particulate Matter in Sterile Vial – Batch STER-5678",
+  problemStatement: "Multiple vials from Batch STER-5678 showed visible black particulate matter during 100% visual inspection (specification: essentially free from visible particulates)",
+  processArea: "Filling / Visual Inspection",
+  status: "In Progress",
+  approvalStatus: "In Review",
+  createdDate: "2026-02-05",
+  createdBy: "Current User",
+  fishbone: {
+    version: "2.0",
+    problemStatement: "Multiple vials from Batch STER-5678 showed visible black particulate matter during 100% visual inspection",
+    categories: [
+      {
+        id: 'cat-1',
+        name: 'Man',
+        color: '#3b82f6',
+        order: 0,
+        causes: [
+          {
+            id: 'cause-1769901234567',
+            text: 'Operator fatigue during extended night shift',
+            description: '',
+            severity: 'medium',
+            order: 0,
+            subCauses: []
+          },
+          {
+            id: 'cause-1769902345678',
+            text: 'Inadequate glove changing frequency',
+            description: '',
+            severity: 'high',
+            order: 1,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-2',
+        name: 'Machine',
+        color: '#10b981',
+        order: 1,
+        causes: [
+          {
+            id: 'cause-1769903456789',
+            text: 'Worn-out filling needle causing shedding',
+            description: '',
+            severity: 'high',
+            order: 0,
+            subCauses: []
+          },
+          {
+            id: 'cause-1769904567890',
+            text: 'Inadequate line clearance after previous batch',
+            description: '',
+            severity: 'medium',
+            order: 1,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-3',
+        name: 'Method',
+        color: '#f59e0b',
+        order: 2,
+        causes: [
+          {
+            id: 'cause-1769905678901',
+            text: 'Visual inspection lighting intensity below SOP requirement',
+            description: '',
+            severity: 'medium',
+            order: 0,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-4',
+        name: 'Material',
+        color: '#8b5cf6',
+        order: 3,
+        causes: [
+          {
+            id: 'cause-1769906789012',
+            text: 'Rubber stopper shedding black particles',
+            description: '',
+            severity: 'high',
+            order: 0,
+            subCauses: []
+          },
+          {
+            id: 'cause-1769907890123',
+            text: 'Primary packaging component contamination from supplier',
+            description: '',
+            severity: 'high',
+            order: 1,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-5',
+        name: 'Measurement',
+        color: '#ec4899',
+        order: 4,
+        causes: [
+          {
+            id: 'cause-1769908901234',
+            text: 'No particle size / nature analysis performed yet',
+            description: '',
+            severity: 'medium',
+            order: 0,
+            subCauses: []
+          }
+        ]
+      },
+      {
+        id: 'cat-6',
+        name: 'Environment',
+        color: '#14b8a6',
+        order: 5,
+        causes: [
+          {
+            id: 'cause-1769909012345',
+            text: 'Airborne particles from adjacent non-classified area',
+            description: '',
+            severity: 'medium',
+            order: 0,
+            subCauses: []
+          }
+        ]
+      }
+    ],
+    locked: false,
+    lockedBy: null,
+    lockedDate: null,
+    selectedRootCauses: []
+  },
+  rootCauseConclusion: '',
+  linkedRecords: [
+   
+  ],
+  approvalChain: [
+    { role: "QA Manager", status: "Approved", date: "2026-02-07" },
+    { role: "Department Head", status: "In Review", date: null },
+    { role: "Quality Director", status: "Pending", date: null }
+  ],
+  attachments: [
+    { name: "particle_photos.zip", size: 1843200, date: "2026-02-06" },
+    { name: "microscopy_report.pdf", size: 875520, date: "2026-02-06" }
+  ],
+  comments: [
+    {
+      author: "Production Lead",
+      date: "2026-02-06 14:20",
+      text: "Line was cleaned per SOP, but previous batch was charcoal-based – possible carryover?"
+    }
+  ],
+  emailsSent: [],
+  auditTrail: [
+    {
+      action: "Record Created",
+      user: "Current User",
+      timestamp: "2026-02-05 09:15",
+      details: "New particulate matter RCA initiated from Complaint #1003 and OOT #4002"
+    },
+    {
+      action: "Comment Added",
+      user: "Production Lead",
+      timestamp: "2026-02-06 14:20",
+      details: "Comment added regarding possible carryover from previous batch"
+    }
+  ]
+}
+],
   recalls: [
     {
-      id: 7001,
+      id: "7001",
       productName: "Product DEF - 100mg Injection",
       batchNumber: "GHI789",
       reason: "Potential microbial contamination",
@@ -760,6 +1176,8 @@ useEffect(() => {
     { id: 'recalls', name: 'Product Recall', icon: AlertCircle },
     { id: 'audits', name: 'Audit Management', icon: FileText },
     { id: 'capa-report', name: 'CAPA Report', icon: FileBarChart },
+    { id: 'rca', name: 'Root Cause Analysis', icon: AlertTriangle },
+
     { id: 'documentation', name: 'Documentation', icon: BookOpen } // NEW
 
   ];
@@ -808,8 +1226,17 @@ useEffect(() => {
 };
   const addRecord = (module, data) => {
     const newRecord = {
-      id: Date.now(),
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       ...data,
+
+       fishbone: data.fishbone || {
+    Man: [],
+    Machine: [],
+    Method: [],
+    Material: [],
+    Measurement: [],
+    Environment: []
+  },
       status: 'Open',
       approvalStatus: 'Pending',
       createdDate: new Date().toLocaleDateString(),
@@ -835,7 +1262,7 @@ useEffect(() => {
     };
     setRecords(prev => ({
       ...prev,
-      [module]: [...prev[module], newRecord]
+      [module]: [...(prev[module] || []), newRecord]
     }));
     addNotification(`New ${module} record created`, 'success');
     return newRecord
@@ -1011,6 +1438,8 @@ useEffect(() => {
     addAuditEntry(module, recordId, 'Comment Added', `Comment: "${comment}"`);
   };
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   // Stats
   const openComplaints = records.complaints.filter(r => r.status === 'Open').length;
   const activeCAPAs = records.capa.filter(r => r.status !== 'Closed').length;
@@ -1193,15 +1622,15 @@ console.log('Monthly Counts:', monthlyCounts);
           <div className="bg-gradient-to-br from-blue-500 to-blue-700 dark:from-blue-600 dark:to-blue-800 rounded-xl shadow-lg p-6 text-white">
             <h3 className="text-xl font-bold mb-4">Quick Actions</h3>
             <div className="grid grid-cols-1 gap-3">
-              <button onClick={() => setActiveModule('complaints')} className="bg-white/20 hover:bg-white/30 p-4 rounded-lg text-left transition">
+              <button onClick={() => navigate('/complaints')} className="bg-white/20 hover:bg-white/30 p-4 rounded-lg text-left transition">
                 <p className="font-medium">Log New Complaint</p>
                 <p className="text-sm opacity-90">Report market feedback</p>
               </button>
-              <button onClick={() => setActiveModule('capa')} className="bg-white/20 hover:bg-white/30 p-4 rounded-lg text-left transition">
+              <button onClick={() => navigate('/capa')} className="bg-white/20 hover:bg-white/30 p-4 rounded-lg text-left transition">
                 <p className="font-medium">Initiate CAPA</p>
                 <p className="text-sm opacity-90">Corrective & Preventive Action</p>
               </button>
-              <button onClick={() => setActiveModule('audits')} className="bg-white/20 hover:bg-white/30 p-4 rounded-lg text-left transition">
+              <button onClick={() => navigate('/audits')} className="bg-white/20 hover:bg-white/30 p-4 rounded-lg text-left transition">
                 <p className="font-medium">Schedule Audit</p>
                 <p className="text-sm opacity-90">Plan internal/external audit</p>
               </button>
@@ -1397,6 +1826,7 @@ const getRecordTitle = (record) => {
 };
 
 const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPendingAction }) => {
+  const navigate = useNavigate();
   console.log('ReRendering RecordDetailModal for record:', record);
   console.log('Module:', module);
   const [comment, setComment] = useState('');
@@ -1405,42 +1835,44 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
 
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div 
-        className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto shadow-2xl border border-gray-200 dark:border-gray-700" 
-        onClick={(e) => e.stopPropagation()}
-      >
-        
-        {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 border-b px-8 py-5 flex justify-between items-center rounded-t-2xl">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
-              {record.title || record.testName || record.vendorName || record.riskTitle || record.productName || record.auditTitle || 'Record Details'}
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {record.createdDate} • Created by {record.createdBy}
-            </p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-800 w-full">
+
+        {/* Header with Back Button */}
+        <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 border-b px-8 py-5 shadow-sm">
+          <div className="flex items-center gap-4 mb-4">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+            >
+              <X className="w-5 h-5" />
+              Back to List
+            </button>
           </div>
-         <PDFDownloadLink
-  document={<RecordPDFDocument record={record} module={module} />}
-  fileName={`${module.toUpperCase()}_Record_${record.id}_${new Date().toISOString().slice(0,10)}.pdf`}
->
-  {({ loading }) => (
-    <button
-      disabled={loading}
-      className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium rounded-lg shadow flex items-center gap-2 transition"
-    >
-      <Download className="w-5 h-5" />
-      {loading ? 'Generating...' : 'Export PDF'}
-    </button>
-  )}
-</PDFDownloadLink>
-          <button 
-            onClick={onClose} 
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition"
-          >
-            <X className="w-6 h-6 text-gray-600 dark:text-gray-300" />
-          </button>
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
+                {record.title || record.testName || record.vendorName || record.riskTitle || record.productName || record.auditTitle || 'Record Details'}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                {record.createdDate} • Created by {record.createdBy} • ID: #{record.id}
+              </p>
+            </div>
+            <PDFDownloadLink
+              document={<RecordPDFDocument record={record} module={module} />}
+              fileName={`${module.toUpperCase()}_Record_${record.id}_${new Date().toISOString().slice(0,10)}.pdf`}
+            >
+              {({ loading }) => (
+                <button
+                  disabled={loading}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium rounded-lg shadow flex items-center gap-2 transition"
+                >
+                  <Download className="w-5 h-5" />
+                  {loading ? 'Generating...' : 'Export PDF'}
+                </button>
+              )}
+            </PDFDownloadLink>
+          </div>
         </div>
 
         {/* Content */}
@@ -1458,7 +1890,267 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
             </div>
           </div>
 
-          
+          {module === 'rca' && record.fishbone && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+                    Fishbone (Ishikawa) Diagram
+                  </h3>
+
+                  {/* Help Tooltip */}
+                  <div className="relative group">
+                    <span
+                      className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold
+                                rounded-full bg-gray-200 text-gray-700
+                                dark:bg-gray-700 dark:text-gray-200
+                                cursor-pointer select-none"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      i
+                    </span>
+
+                    {/* Tooltip Content */}
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 mt-2 w-96
+                                rounded-lg bg-gray-900 text-white text-xs
+                                px-4 py-3 shadow-lg
+                                opacity-0 group-hover:opacity-100
+                                pointer-events-none transition-opacity
+                                z-50"
+                    >
+                      <p className="mb-2 font-semibold">
+                        Fishbone (Ishikawa) Diagram
+                      </p>
+
+                      <p className="mb-3 text-gray-200">
+                        Used to systematically identify, categorize, and analyze potential causes
+                        contributing to a problem as part of Root Cause Analysis.
+                      </p>
+
+                      <ul className="space-y-1 text-gray-100">
+                        <li>
+                          <strong>Man</strong> – Human factors (training, errors, communication)
+                        </li>
+                        <li>
+                          <strong>Machine</strong> – Equipment, tools, maintenance
+                        </li>
+                        <li>
+                          <strong>Method</strong> – Procedures, SOPs, workflows
+                        </li>
+                        <li>
+                          <strong>Material</strong> – Raw materials, components, suppliers
+                        </li>
+                        <li>
+                          <strong>Measurement</strong> – Testing methods, calibration, data accuracy
+                        </li>
+                        <li>
+                          <strong>Environment</strong> – Temperature, humidity, facility conditions
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Structured cause-and-effect analysis to support regulatory-compliant root cause identification.
+                </p>
+              </div>
+
+                {/* Editable Section */}
+                  <EditableFishbone
+                    fishbone={record.fishbone}
+                    onChange={(updatedFishbone) => {
+                      setRecords(prev => ({
+                        ...prev,
+                        rca: prev.rca.map(r =>
+                          r.id === record.id
+                            ? { ...r, fishbone: updatedFishbone }
+                            : r
+                        )
+                      }));
+                    }}
+                  />
+
+              <FishboneDiagram fishbone={record.fishbone} />
+
+              {/* Root Cause Conclusion Section */}
+              <div className="mt-6 border-t pt-6" onClick={(e) => e.stopPropagation()}>
+                <h4 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                  Root Cause Conclusion
+                </h4>
+
+                {record.fishbone.locked ? (
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border-l-4 border-blue-600">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-medium">LOCKED</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        <p>Locked by: {record.fishbone.lockedBy || 'Current User'}</p>
+                        <p>Date: {record.fishbone.lockedDate || new Date().toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded">
+                      <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{record.rootCauseConclusion || 'No conclusion recorded'}</p>
+                    </div>
+                    {record.fishbone.selectedRootCauses && record.fishbone.selectedRootCauses.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selected Root Causes:</p>
+                        <div className="space-y-2">
+                          {record.fishbone.selectedRootCauses.map((rootCauseId, idx) => {
+                            // Find the cause text
+                            let causeText = '';
+                            record.fishbone.categories.forEach(cat => {
+                              const found = cat.causes.find(c => c.id === rootCauseId);
+                              if (found) causeText = `${cat.name}: ${found.text}`;
+                            });
+                            return (
+                              <div key={idx} className="flex items-center gap-2 text-sm bg-blue-50 dark:bg-blue-900/30 p-2 rounded">
+                                <CheckCircle className="w-4 h-4 text-blue-600" />
+                                <span className="text-gray-700 dark:text-gray-300">{causeText}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* Editable Conclusion */}
+                    <textarea
+                      className="w-full p-3 border rounded-lg mb-4 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                      rows="4"
+                      placeholder="Document the root cause conclusion based on the fishbone analysis..."
+                      value={record.rootCauseConclusion || ''}
+                      onChange={(e) => {
+                        setRecords(prev => ({
+                          ...prev,
+                          rca: prev.rca.map(r =>
+                            r.id === record.id
+                              ? { ...r, rootCauseConclusion: e.target.value }
+                              : r
+                          )
+                        }));
+                      }}
+                    />
+
+                    {/* Select Root Causes */}
+                    <div className="mb-4">
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Select Root Causes from Fishbone:</p>
+                      <div className="space-y-3 max-h-60 overflow-y-auto bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                        {record.fishbone.categories.map(category => (
+                          category.causes && category.causes.length > 0 && (
+                            <div key={category.id}>
+                              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2" style={{ color: category.color }}>
+                                {category.name}
+                              </p>
+                              {category.causes.map(cause => (
+                                <label key={cause.id} className="flex items-start gap-3 p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    className="mt-1"
+                                    checked={record.fishbone.selectedRootCauses?.includes(cause.id) || false}
+                                    onChange={(e) => {
+                                      const isChecked = e.target.checked;
+                                      setRecords(prev => ({
+                                        ...prev,
+                                        rca: prev.rca.map(r =>
+                                          r.id === record.id
+                                            ? {
+                                                ...r,
+                                                fishbone: {
+                                                  ...r.fishbone,
+                                                  selectedRootCauses: isChecked
+                                                    ? [...(r.fishbone.selectedRootCauses || []), cause.id]
+                                                    : (r.fishbone.selectedRootCauses || []).filter(id => id !== cause.id)
+                                                }
+                                              }
+                                            : r
+                                        )
+                                      }));
+                                    }}
+                                  />
+                                  <span className="text-sm text-gray-700 dark:text-gray-300">{cause.text}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Lock Button */}
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!record.rootCauseConclusion || !record.rootCauseConclusion.trim()) {
+                            alert('Please enter a root cause conclusion before locking.');
+                            return;
+                          }
+                          if (!record.fishbone.selectedRootCauses || record.fishbone.selectedRootCauses.length === 0) {
+                            alert('Please select at least one root cause before locking.');
+                            return;
+                          }
+                          if (window.confirm('Lock this fishbone analysis? This action cannot be undone without quality approval.')) {
+                            setRecords(prev => ({
+                              ...prev,
+                              rca: prev.rca.map(r =>
+                                r.id === record.id
+                                  ? {
+                                      ...r,
+                                      fishbone: {
+                                        ...r.fishbone,
+                                        locked: true,
+                                        lockedBy: 'Current User',
+                                        lockedDate: new Date().toLocaleString()
+                                      }
+                                    }
+                                  : r
+                              )
+                            }));
+                            addNotification('Fishbone analysis locked successfully', 'success');
+                          }
+                        }}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                        Finalize & Lock Analysis
+                      </button>
+
+                      {record.fishbone.selectedRootCauses && record.fishbone.selectedRootCauses.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowInitiateCAPA(true);
+                            setCapaSource({
+                              module: 'rca',
+                              recordId: record.id,
+                              recordTitle: record.title,
+                              rootCauses: record.fishbone.selectedRootCauses.map(causeId => {
+                                let causeText = '';
+                                record.fishbone.categories.forEach(cat => {
+                                  const found = cat.causes.find(c => c.id === causeId);
+                                  if (found) causeText = found.text;
+                                });
+                                return causeText;
+                              })
+                            });
+                          }}
+                          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                        >
+                          <TrendingUp className="w-5 h-5" />
+                          Link to CAPA ({record.fishbone.selectedRootCauses.length} causes)
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Quick Status Overview */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-gray-50 dark:bg-gray-700 p-5 rounded-xl border border-gray-200 dark:border-gray-600">
@@ -1484,7 +2176,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
           </div>
           {/* CAPA Effectiveness Check - Only for CAPA module */}
           {module === 'capa' && (
-            <div className={`rounded-xl p-6 border ${record.status === 'Effectiveness Pending' ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'}`}>
+            <div className={`rounded-xl p-6 border ${record.status === 'Effectiveness Pending' ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'}`} onClick={(e) => e.stopPropagation()}>
               <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <CheckCircle className={`w-6 h-6 ${record.status === 'Effectiveness Pending' ? 'text-amber-600' : 'text-green-600'}`} />
                 CAPA Effectiveness Check
@@ -1513,7 +2205,8 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
                   </p>
                   <div className="flex gap-4">
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setPendingAction({
                           type: 'effectiveness',
                           capaId: record.id,
@@ -1526,7 +2219,8 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
                       Mark as Effective
                     </button>
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         const note = prompt('Why is this CAPA ineffective? (Required for re-opening)');
                         if (note && note.trim()) {
                           setPendingAction({
@@ -1676,7 +2370,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
           </div>
          {/* Initiate CAPA Button - Only if no CAPA linked yet */}
           {(module === 'complaints' || module === 'oot') && (
-            <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
+            <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-6 border border-blue-200 dark:border-blue-800" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-blue-800 dark:text-blue-300 mb-4">
                 Initiate Corrective/Preventive Action
               </h3>
@@ -1701,7 +2395,8 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
                 </div>
               ) : (
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   const sourceTitle = record.title || record.testName || `Record #${record.id}`;
                   setCapaSource({
                     module,
@@ -1718,12 +2413,13 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
             </div>
           )}
           {/* Link to Existing Record Button */}
-            <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-xl p-6 border border-indigo-200 dark:border-indigo-800">
+            <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-xl p-6 border border-indigo-200 dark:border-indigo-800" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-300 mb-4">
                 Link to Existing Record
               </h3>
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   const sourceTitle = record.title || record.testName || record.vendorName || `Record #${record.id}`;
                   setLinkSource({
                     module,
@@ -1739,7 +2435,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
             </div>
 
           {/* Attachments Section */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
               <Upload className="w-6 h-6 text-blue-600" />
               Attachments ({record.attachments.length})
@@ -1773,7 +2469,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
           </div>
 
           {/* Email Notifications */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
               <Mail className="w-6 h-6 text-blue-600" />
               Email Notifications
@@ -1803,7 +2499,8 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
                 onChange={(e) => setEmailSubject(e.target.value)}
               />
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (emailRecipient && emailSubject) {
                     sendEmail(module, record.id, emailRecipient, emailSubject);
                     setEmailRecipient('');
@@ -1818,7 +2515,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
           </div>
 
           {/* Comments Section */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-gray-800 mb-4">Comments & Collaboration</h3>
             <div className="space-y-4 mb-6">
               {record.comments.map((c, idx) => (
@@ -1846,7 +2543,8 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
                 }}
               />
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (comment.trim()) {
                     addComment(module, record.id, comment);
                     setComment('');
@@ -1882,7 +2580,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
             </div>
           </div>
           {/* Traceability Matrix - Linked Records */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-2">
               <Link className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
               Traceability Matrix
@@ -1900,17 +2598,10 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
                       </p>
                     </div>
                     <button
-                      onClick={() => {
-                        // Optional: Switch to linked module and select record
-                        setActiveModule(link.module);
-                        // Find and set selectedRecord from linked id
-                        const linkedRecord = records[link.module].find(r => r.id === link.id);
-                        if (linkedRecord) {
-                          console.log('Navigating to linked record:', linkedRecord);
-                          //setSelectedRecord(linkedRecord);
-                        } else {
-                          addNotification('Linked record not found', 'warning');
-                        }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Navigate to linked module and record
+                        navigate(`/${link.module}/${link.id}`);
                       }}
                       className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition"
                     >
@@ -1927,8 +2618,6 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
           </div>
         </div>
       </div>
-     
-
     </div>
   );
 };
@@ -1954,6 +2643,8 @@ const handleInitiateCAPA = (capaData) => {
   setCapaSource(null);
 };
  const ComplaintsModule = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -1961,9 +2652,26 @@ const handleInitiateCAPA = (capaData) => {
     product: ''
   });
 
-  const [selectedRecord, setSelectedRecord] = useState(null);
-
   const isFormValid = form.title.trim() && form.description.trim();
+
+  // If there's an ID in URL, find and show that record
+  if (id) {
+    const record = records.complaints.find(r => r.id === id);
+    if (record) {
+      return (
+        <RecordDetailModal
+          record={record}
+          module="complaints"
+          setShowESignature={setShowESignature}
+          setPendingAction={setPendingAction}
+          onClose={() => navigate('/complaints')}
+        />
+      );
+    } else {
+      // Record not found, redirect to list
+      return <Navigate to="/complaints" replace />;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -2076,24 +2784,135 @@ const handleInitiateCAPA = (capaData) => {
         records={records.complaints}
         module="complaints"
         updateStatus={updateRecordStatus}
-        onViewDetails={setSelectedRecord}
+        onViewDetails={(record) => navigate(`/complaints/${record.id}`)}
       />
+    </div>
+  );
+};
+const RCAModule = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [form, setForm] = useState({
+    title: '',
+    problemStatement: '',
+    processArea: ''
+  });
 
-      {selectedRecord && (
+  const isFormValid = form.title.trim() && form.problemStatement.trim();
+
+  // If there's an ID in URL, find and show that record
+  if (id) {
+    const record = records.rca.find(r => r.id === id);
+    if (record) {
+      return (
         <RecordDetailModal
-          record={selectedRecord}
-          module="complaints"
+          record={record}
+          module="rca"
           setShowESignature={setShowESignature}
           setPendingAction={setPendingAction}
-          onClose={() => setSelectedRecord(null)}
+          onClose={() => navigate('/rca')}
         />
-      )}
+      );
+    } else {
+      return <Navigate to="/rca" replace />;
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">
+        Root Cause Analysis (RCA)
+      </h2>
+
+      {/* Create RCA */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">
+          New RCA
+        </h3>
+
+        <div className="space-y-4">
+
+          <input
+            type="text"
+            placeholder="RCA Title"
+            className="w-full p-2 border rounded"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
+
+          <textarea
+            placeholder="Problem Statement"
+            className="w-full p-2 border rounded h-24"
+            value={form.problemStatement}
+            onChange={(e) => setForm({ ...form, problemStatement: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Process / Area"
+            className="w-full p-2 border rounded"
+            value={form.processArea}
+            onChange={(e) => setForm({ ...form, processArea: e.target.value })}
+          />
+
+          <button
+            disabled={!isFormValid}
+            onClick={() => {
+              addRecord('rca', {
+                ...form,
+                fishbone: {
+                  version: "2.0",
+                  problemStatement: form.problemStatement,
+                  categories: [
+                    { id: 'cat-1', name: 'Man', color: '#3b82f6', order: 0, causes: [] },
+                    { id: 'cat-2', name: 'Machine', color: '#10b981', order: 1, causes: [] },
+                    { id: 'cat-3', name: 'Method', color: '#f59e0b', order: 2, causes: [] },
+                    { id: 'cat-4', name: 'Material', color: '#8b5cf6', order: 3, causes: [] },
+                    { id: 'cat-5', name: 'Measurement', color: '#ec4899', order: 4, causes: [] },
+                    { id: 'cat-6', name: 'Environment', color: '#14b8a6', order: 5, causes: [] }
+                  ],
+                  locked: false,
+                  lockedBy: null,
+                  lockedDate: null,
+                  selectedRootCauses: []
+                },
+                rootCauseConclusion: ''
+
+              });
+
+              setForm({
+                title: '',
+                problemStatement: '',
+                processArea: ''
+              });
+            }}
+            className={`w-full p-2 rounded text-white ${
+              isFormValid
+                ? 'bg-blue-600 hover:bg-blue-700'
+                : 'bg-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Create RCA
+          </button>
+
+        </div>
+      </div>
+
+      {/* List */}
+      <RecordList
+        records={records.rca}
+        module="rca"
+        updateStatus={updateRecordStatus}
+        onViewDetails={(record) => navigate(`/rca/${record.id}`)}
+      />
     </div>
   );
 };
 
 
  const CAPAModule = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     title: '',
     rootCause: '',
@@ -2101,9 +2920,25 @@ const handleInitiateCAPA = (capaData) => {
     preventiveAction: ''
   });
 
-  const [selectedRecord, setSelectedRecord] = useState(null);
-
   const isFormValid = form.title.trim();
+
+  // If there's an ID in URL, find and show that record
+  if (id) {
+    const record = records.capa.find(r => r.id === id);
+    if (record) {
+      return (
+        <RecordDetailModal
+          record={record}
+          module="capa"
+          setShowESignature={setShowESignature}
+          setPendingAction={setPendingAction}
+          onClose={() => navigate('/capa')}
+        />
+      );
+    } else {
+      return <Navigate to="/capa" replace />;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -2210,23 +3045,15 @@ const handleInitiateCAPA = (capaData) => {
         records={records.capa}
         module="capa"
         updateStatus={updateRecordStatus}
-        onViewDetails={setSelectedRecord}
+        onViewDetails={(record) => navigate(`/capa/${record.id}`)}
       />
-
-      {selectedRecord && (
-        <RecordDetailModal
-          record={selectedRecord}
-          module="capa"
-          setShowESignature={setShowESignature}
-          setPendingAction={setPendingAction}
-          onClose={() => setSelectedRecord(null)}
-        />
-      )}
     </div>
   );
 };
 
   const OOTModule = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     testName: '',
     result: '',
@@ -2234,9 +3061,25 @@ const handleInitiateCAPA = (capaData) => {
     investigation: ''
   });
 
-  const [selectedRecord, setSelectedRecord] = useState(null);
-
   const isFormValid = form.testName.trim();
+
+  // If there's an ID in URL, find and show that record
+  if (id) {
+    const record = records.oot.find(r => r.id === id);
+    if (record) {
+      return (
+        <RecordDetailModal
+          record={record}
+          module="oot"
+          setShowESignature={setShowESignature}
+          setPendingAction={setPendingAction}
+          onClose={() => navigate('/oot')}
+        />
+      );
+    } else {
+      return <Navigate to="/oot" replace />;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -2345,24 +3188,16 @@ const handleInitiateCAPA = (capaData) => {
         records={records.oot}
         module="oot"
         updateStatus={updateRecordStatus}
-        onViewDetails={setSelectedRecord}
+        onViewDetails={(record) => navigate(`/oot/${record.id}`)}
       />
-
-      {selectedRecord && (
-        <RecordDetailModal
-          record={selectedRecord}
-          module="oot"
-          setShowESignature={setShowESignature}
-          setPendingAction={setPendingAction}
-          onClose={() => setSelectedRecord(null)}
-        />
-      )}
     </div>
   );
 };
 
 
 const VendorModule = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     vendorName: '',
     category: '',
@@ -2370,9 +3205,25 @@ const VendorModule = () => {
     auditDate: ''
   });
 
-  const [selectedRecord, setSelectedRecord] = useState(null);
-
   const isFormValid = form.vendorName.trim();
+
+  // If there's an ID in URL, find and show that record
+  if (id) {
+    const record = records.vendors.find(r => r.id === id);
+    if (record) {
+      return (
+        <RecordDetailModal
+          record={record}
+          module="vendors"
+          setShowESignature={setShowESignature}
+          setPendingAction={setPendingAction}
+          onClose={() => navigate('/vendors')}
+        />
+      );
+    } else {
+      return <Navigate to="/vendors" replace />;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -2484,31 +3335,21 @@ const VendorModule = () => {
         records={records.vendors}
         module="vendors"
         updateStatus={updateRecordStatus}
-        onViewDetails={setSelectedRecord}
+        onViewDetails={(record) => navigate(`/vendors/${record.id}`)}
       />
-
-      {selectedRecord && (
-        <RecordDetailModal
-          record={selectedRecord}
-          module="vendors"
-          setShowESignature={setShowESignature}
-          setPendingAction={setPendingAction}
-          onClose={() => setSelectedRecord(null)}
-        />
-      )}
     </div>
   );
 };
 
  const RiskModule = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     riskTitle: '',
     probability: 'Low',
     severity: 'Low',
     mitigation: ''
   });
-
-  const [selectedRecord, setSelectedRecord] = useState(null);
 
   const riskScoreMap = {
     Low: 1,
@@ -2529,6 +3370,24 @@ const VendorModule = () => {
   const isFormValid =
     form.riskTitle.trim() &&
     form.mitigation.trim();
+
+  // If there's an ID in URL, find and show that record
+  if (id) {
+    const record = records.risks.find(r => r.id === id);
+    if (record) {
+      return (
+        <RecordDetailModal
+          record={record}
+          module="risks"
+          setShowESignature={setShowESignature}
+          setPendingAction={setPendingAction}
+          onClose={() => navigate('/risks')}
+        />
+      );
+    } else {
+      return <Navigate to="/risks" replace />;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -2654,23 +3513,15 @@ const VendorModule = () => {
         records={records.risks}
         module="risks"
         updateStatus={updateRecordStatus}
-        onViewDetails={setSelectedRecord}
+        onViewDetails={(record) => navigate(`/risks/${record.id}`)}
       />
-
-      {selectedRecord && (
-        <RecordDetailModal
-          record={selectedRecord}
-          module="risks"
-          setShowESignature={setShowESignature}
-          setPendingAction={setPendingAction}
-          onClose={() => setSelectedRecord(null)}
-        />
-      )}
     </div>
   );
 };
 
  const RecallModule = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     productName: '',
     batchNumber: '',
@@ -2678,9 +3529,25 @@ const VendorModule = () => {
     recallClass: 'Class III'
   });
 
-  const [selectedRecord, setSelectedRecord] = useState(null);
-
   const isFormValid = form.productName.trim();
+
+  // If there's an ID in URL, find and show that record
+  if (id) {
+    const record = records.recalls.find(r => r.id === id);
+    if (record) {
+      return (
+        <RecordDetailModal
+          record={record}
+          module="recalls"
+          setShowESignature={setShowESignature}
+          setPendingAction={setPendingAction}
+          onClose={() => navigate('/recalls')}
+        />
+      );
+    } else {
+      return <Navigate to="/recalls" replace />;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -2791,24 +3658,16 @@ const VendorModule = () => {
         records={records.recalls}
         module="recalls"
         updateStatus={updateRecordStatus}
-        onViewDetails={setSelectedRecord}
+        onViewDetails={(record) => navigate(`/recalls/${record.id}`)}
       />
-
-      {selectedRecord && (
-        <RecordDetailModal
-          record={selectedRecord}
-          module="recalls"
-          setShowESignature={setShowESignature}
-          setPendingAction={setPendingAction}
-          onClose={() => setSelectedRecord(null)}
-        />
-      )}
     </div>
   );
 };
 
 
  const AuditModule = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     auditTitle: '',
     auditType: 'Internal',
@@ -2816,9 +3675,25 @@ const VendorModule = () => {
     auditor: ''
   });
 
-  const [selectedRecord, setSelectedRecord] = useState(null);
-
   const isFormValid = form.auditTitle.trim();
+
+  // If there's an ID in URL, find and show that record
+  if (id) {
+    const record = records.audits.find(r => r.id === id);
+    if (record) {
+      return (
+        <RecordDetailModal
+          record={record}
+          module="audits"
+          setShowESignature={setShowESignature}
+          setPendingAction={setPendingAction}
+          onClose={() => navigate('/audits')}
+        />
+      );
+    } else {
+      return <Navigate to="/audits" replace />;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -2931,23 +3806,13 @@ const VendorModule = () => {
         records={records.audits}
         module="audits"
         updateStatus={updateRecordStatus}
-        onViewDetails={setSelectedRecord}
+        onViewDetails={(record) => navigate(`/audits/${record.id}`)}
       />
-
-      {selectedRecord && (
-        <RecordDetailModal
-          record={selectedRecord}
-          module="audits"
-          setShowESignature={setShowESignature}
-          setPendingAction={setPendingAction}
-          onClose={() => setSelectedRecord(null)}
-        />
-      )}
     </div>
   );
 };
 
-  const RecordList = ({ records, module, updateStatus, onViewDetails }) => (
+  const RecordList = ({ records=[], module, updateStatus, onViewDetails }) => (
     <div className="bg-white p-6 rounded-lg shadow">
       <h3 className="text-lg font-semibold mb-4">Records ({records.length})</h3>
       <div className="space-y-3">
@@ -3430,21 +4295,7 @@ const Documentation = () => {
     </div>
   );
 };
-  const renderModule = () => {
-    switch(activeModule) {
-      case 'dashboard': return <Dashboard />;
-      case 'complaints': return <ComplaintsModule />;
-      case 'capa': return <CAPAModule />;
-      case 'oot': return <OOTModule />;
-      case 'vendors': return <VendorModule />;
-      case 'risks': return <RiskModule />;
-      case 'recalls': return <RecallModule />;
-      case 'audits': return <AuditModule />;
-      case 'capa-report': return <CAPAReport />;
-      case 'documentation': return <Documentation />;
-      default: return <Dashboard />;
-    }
-  };
+  // Routes are now handled by React Router in the return statement
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -3459,23 +4310,7 @@ const Documentation = () => {
           <b><h1 className="text-2xl font-bold"> QMS</h1></b>
   </div>
         <nav className="space-y-2">
-          {modules.map(module => {
-            const Icon = module.icon;
-            return (
-              <button
-                key={module.id}
-                onClick={() => setActiveModule(module.id)}
-                className={`w-full flex items-center gap-3 p-3 rounded transition ${
-                  activeModule === module.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="text-sm">{module.name}</span>
-              </button>
-            );
-          })}
+          <NavigationLinks modules={modules} />
         </nav>
       </div>
       <div className="flex-1 overflow-auto">
@@ -3518,7 +4353,27 @@ const Documentation = () => {
           </div>
         </div>
         <div className="p-8">
-          {renderModule()}
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/complaints" element={<ComplaintsModule />} />
+            <Route path="/complaints/:id" element={<ComplaintsModule />} />
+            <Route path="/capa" element={<CAPAModule />} />
+            <Route path="/capa/:id" element={<CAPAModule />} />
+            <Route path="/oot" element={<OOTModule />} />
+            <Route path="/oot/:id" element={<OOTModule />} />
+            <Route path="/vendors" element={<VendorModule />} />
+            <Route path="/vendors/:id" element={<VendorModule />} />
+            <Route path="/risks" element={<RiskModule />} />
+            <Route path="/risks/:id" element={<RiskModule />} />
+            <Route path="/recalls" element={<RecallModule />} />
+            <Route path="/recalls/:id" element={<RecallModule />} />
+            <Route path="/audits" element={<AuditModule />} />
+            <Route path="/audits/:id" element={<AuditModule />} />
+            <Route path="/capa-report" element={<CAPAReport />} />
+            <Route path="/rca" element={<RCAModule />} />
+            <Route path="/rca/:id" element={<RCAModule />} />
+            <Route path="/documentation" element={<Documentation />} />
+          </Routes>
         </div>
       </div>
       {/* Initiate CAPA Modal */}
@@ -3566,4 +4421,11 @@ const Documentation = () => {
 
 };
 
-export default QMSApp;
+// Wrap QMSApp with BrowserRouter
+const App = () => (
+  <BrowserRouter>
+    <QMSApp />
+  </BrowserRouter>
+);
+
+export default App;
