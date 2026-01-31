@@ -422,20 +422,23 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
 
   const CAPAReport = () => {
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterRisk, setFilterRisk] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredCAPAs = records.capa.filter(capa => {
     const matchesStatus = filterStatus === 'all' || capa.status === filterStatus;
-    const matchesSearch = 
+    const matchesRisk = filterRisk === 'all' || capa.riskTier === filterRisk;
+    const matchesSearch =
       capa.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       String(capa.id).includes(searchTerm);
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesRisk && matchesSearch;
   });
 
   const exportToCSV = () => {
     const headers = [
       'ID',
       'Title',
+      'Risk Tier',
       'Status',
       'Created Date',
       'Linked From',
@@ -448,6 +451,7 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
     const rows = filteredCAPAs.map(capa => [
       capa.id,
       capa.title || 'Untitled',
+      capa.riskTier || 'Not Assessed',
       capa.status,
       capa.createdDate,
       capa.linkedRecords?.map(l => `${formatModuleName(l.module)} #${l.id}`).join('; ') || 'None',
@@ -489,7 +493,7 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Filter by Status
@@ -504,6 +508,21 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
               <option value="In Progress">In Progress</option>
               <option value="Effectiveness Pending">Effectiveness Pending</option>
               <option value="Closed">Closed</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Filter by Risk Tier
+            </label>
+            <select
+              value={filterRisk}
+              onChange={(e) => setFilterRisk(e.target.value)}
+              className="w-full p-3 border rounded-lg dark:bg-gray-700"
+            >
+              <option value="all">All Risk Levels</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
             </select>
           </div>
           <div>
@@ -527,9 +546,11 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-               
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Title
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Risk Tier
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
@@ -540,22 +561,23 @@ const [linkSource, setLinkSource] = useState(null); // { module, id, title }
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Effectiveness
                 </th>
-              
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {filteredCAPAs.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                     No CAPA records found
                   </td>
                 </tr>
               ) : (
                 filteredCAPAs.map(capa => (
                   <tr key={capa.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                    
                     <td className="px-6 py-4 text-sm text-gray-900 dark:text-white max-w-md">
                       {capa.title || 'Untitled CAPA'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <RiskTierBadge tier={capa.riskTier} />
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -660,6 +682,8 @@ useEffect(() => {
       createdBy: "Current User",
       effectivenessDueDate: "2026-01-17",
       effectivenessChecked: false,
+      riskTier: "High",
+      riskFactors: [{ source: "Complaint", sourceId: "1001", field: "severity", value: "Critical" }],
       linkedRecords: [{ module: "complaints", id: "1001", title: "Packaging Leakage - Batch XYZ123" }],
       approvalChain: [
         { role: "QA Manager", status: "Approved", date: "2025-12-20" },
@@ -706,6 +730,7 @@ useEffect(() => {
       testName: "Dissolution Test - Batch DEF789",
       result: "78%",
       specification: "80-120%",
+      severity: "High",
       investigation: "Trend observed over last 3 batches. Possible equipment calibration drift.",
       status: "Open",
       approvalStatus: "Pending",
@@ -783,6 +808,7 @@ useEffect(() => {
   title: "Batch Number Labelling Error – Batch LAB-ERR-3921",
   problemStatement: "Batch number printed on secondary packaging (cartons) does not match the actual batch number assigned in the batch manufacturing record (BMR). Printed: LAB-ERR-3921 vs Actual: LAB-ERR-3920. Risk of product mix-up and regulatory non-compliance.",
   processArea: "Secondary Packaging / Labelling",
+  severity: "Critical",
   status: "Open",
   approvalStatus: "Pending",
   createdDate: "2026-01-30",
@@ -943,6 +969,7 @@ useEffect(() => {
   title: "Foreign Particulate Matter in Sterile Vial – Batch STER-5678",
   problemStatement: "Multiple vials from Batch STER-5678 showed visible black particulate matter during 100% visual inspection (specification: essentially free from visible particulates)",
   processArea: "Filling / Visual Inspection",
+  severity: "High",
   status: "In Progress",
   approvalStatus: "In Review",
   createdDate: "2026-02-05",
@@ -1224,6 +1251,87 @@ useEffect(() => {
 
   addNotification('Records successfully linked', 'success');
 };
+
+  // CAPA Risk Tiering: Auto-calculate risk based on linked record data
+  const calculateCAPARisk = (allRecords, capaRecord) => {
+    const riskFactors = [];
+    let highestTier = 'Low';
+
+    const tierRank = { Low: 0, Medium: 1, High: 2 };
+    const setTierIfHigher = (newTier) => {
+      if (tierRank[newTier] > tierRank[highestTier]) {
+        highestTier = newTier;
+      }
+    };
+
+    (capaRecord.linkedRecords || []).forEach(link => {
+      // Complaint severity
+      if (link.module === 'complaints') {
+        const complaint = allRecords.complaints?.find(r => r.id === link.id);
+        if (complaint && complaint.severity) {
+          riskFactors.push({ source: 'Complaint', sourceId: link.id, field: 'severity', value: complaint.severity });
+          const sev = complaint.severity;
+          if (sev === 'Critical' || sev === 'High') setTierIfHigher('High');
+          else if (sev === 'Medium') setTierIfHigher('Medium');
+        }
+      }
+
+      // RCA record-level severity + fishbone selected root cause severities
+      if (link.module === 'rca') {
+        const rcaRecord = allRecords.rca?.find(r => r.id === link.id);
+        if (rcaRecord) {
+          // Check record-level severity first
+          if (rcaRecord.severity) {
+            riskFactors.push({ source: 'RCA', sourceId: link.id, field: 'severity', value: rcaRecord.severity });
+            const sev = rcaRecord.severity;
+            if (sev === 'Critical' || sev === 'High') setTierIfHigher('High');
+            else if (sev === 'Medium') setTierIfHigher('Medium');
+          }
+          // Also check fishbone cause-level severities
+          if (rcaRecord.fishbone) {
+            const selectedIds = rcaRecord.fishbone.selectedRootCauses || [];
+            const categories = rcaRecord.fishbone.categories || [];
+            selectedIds.forEach(causeId => {
+              for (const cat of categories) {
+                const cause = cat.causes?.find(c => c.id === causeId);
+                if (cause && cause.severity) {
+                  riskFactors.push({ source: 'RCA Root Cause', sourceId: link.id, field: 'cause severity', value: cause.severity, causeText: cause.text });
+                  const sev = cause.severity.toLowerCase();
+                  if (sev === 'critical' || sev === 'high') setTierIfHigher('High');
+                  else if (sev === 'medium') setTierIfHigher('Medium');
+                  break;
+                }
+              }
+            });
+          }
+        }
+      }
+
+      // OOT severity (if present)
+      if (link.module === 'oot') {
+        const ootRecord = allRecords.oot?.find(r => r.id === link.id);
+        if (ootRecord && ootRecord.severity) {
+          riskFactors.push({ source: 'OOT', sourceId: link.id, field: 'severity', value: ootRecord.severity });
+          const sev = ootRecord.severity;
+          if (sev === 'Critical' || sev === 'High') setTierIfHigher('High');
+          else if (sev === 'Medium') setTierIfHigher('Medium');
+        }
+      }
+
+      // Risk Management riskScore
+      if (link.module === 'risks') {
+        const riskRecord = allRecords.risks?.find(r => r.id === link.id);
+        if (riskRecord && riskRecord.riskScore != null) {
+          riskFactors.push({ source: 'Risk Assessment', sourceId: link.id, field: 'riskScore', value: riskRecord.riskScore });
+          if (riskRecord.riskScore >= 6) setTierIfHigher('High');
+          else if (riskRecord.riskScore >= 3) setTierIfHigher('Medium');
+        }
+      }
+    });
+
+    return { riskTier: highestTier, riskFactors };
+  };
+
   const addRecord = (module, data) => {
     const newRecord = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -1258,7 +1366,8 @@ useEffect(() => {
         }
       ],
       emailsSent: [],
-      linkedRecords: []  // NEW: Empty array for links
+      linkedRecords: [],  // Empty array for links
+      ...(module === 'capa' ? { riskTier: data.riskTier || 'Low', riskFactors: data.riskFactors || [] } : {})
     };
     setRecords(prev => ({
       ...prev,
@@ -1792,7 +1901,8 @@ const MetricCard = ({ title, value, trend, trendUp, color, icon: Icon, bgGradien
     'auditTrail',
     'id',
     'createdBy',
-    'linkedRecords'
+    'linkedRecords',
+    'riskFactors'
   ];
 
   return Object.entries(record)
@@ -1815,6 +1925,21 @@ const MetricCard = ({ title, value, trend, trendUp, color, icon: Icon, bgGradien
       );
     });
 };
+
+const RiskTierBadge = ({ tier }) => {
+  if (!tier) return null;
+  const colorMap = {
+    High: 'bg-red-100 text-red-800 border-red-300',
+    Medium: 'bg-amber-100 text-amber-800 border-amber-300',
+    Low: 'bg-green-100 text-green-800 border-green-300'
+  };
+  return (
+    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${colorMap[tier] || 'bg-gray-100 text-gray-800 border-gray-300'}`}>
+      {tier} Risk
+    </span>
+  );
+};
+
 const getRecordTitle = (record) => {
   return record.title || 
          record.testName || 
@@ -1857,6 +1982,16 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                 {record.createdDate} • Created by {record.createdBy} • ID: #{record.id}
               </p>
+              {module === 'capa' && record.riskTier && (
+                <div className="mt-2 flex items-center gap-2">
+                  <RiskTierBadge tier={record.riskTier} />
+                  {record.riskFactors && record.riskFactors.length > 0 && (
+                    <span className="text-xs text-gray-500">
+                      ({record.riskFactors.length} factor{record.riskFactors.length !== 1 ? 's' : ''} evaluated)
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <PDFDownloadLink
               document={<RecordPDFDocument record={record} module={module} />}
@@ -1889,6 +2024,39 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
               {renderRecordDetails(record)}
             </div>
           </div>
+
+          {/* CAPA Risk Assessment Section */}
+          {module === 'capa' && record.riskFactors && record.riskFactors.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-2">
+                <Shield className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                Risk Assessment
+              </h3>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Overall Risk Tier:</span>
+                <RiskTierBadge tier={record.riskTier} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Contributing Factors:</p>
+                {record.riskFactors.map((factor, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase w-36 shrink-0">{factor.source}</span>
+                    <span className="text-sm text-gray-800 dark:text-gray-200">
+                      {factor.field}: <strong>{String(factor.value)}</strong>
+                    </span>
+                    {factor.causeText && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate">— {factor.causeText}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Risk tier is auto-calculated from linked record data. Linking or unlinking records will trigger recalculation.
+                </p>
+              </div>
+            </div>
+          )}
 
           {module === 'rca' && record.fishbone && (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
@@ -2369,7 +2537,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
             </div>
           </div>
          {/* Initiate CAPA Button - Only if no CAPA linked yet */}
-          {(module === 'complaints' || module === 'oot') && (
+          {(module === 'complaints' || module === 'oot' || module === 'risks') && (
             <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-6 border border-blue-200 dark:border-blue-800" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-blue-800 dark:text-blue-300 mb-4">
                 Initiate Corrective/Preventive Action
@@ -2397,7 +2565,7 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  const sourceTitle = record.title || record.testName || `Record #${record.id}`;
+                  const sourceTitle = record.title || record.testName || record.riskTitle || `Record #${record.id}`;
                   setCapaSource({
                     module,
                     recordId: record.id,
@@ -2623,13 +2791,38 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
 };
 
 const handleLinkExisting = (targetModule, targetId, targetTitle) => {
-  linkRecords(linkSource.module, linkSource.id, targetModule, targetId,linkSource.title, targetTitle);
+  linkRecords(linkSource.module, linkSource.id, targetModule, targetId, linkSource.title, targetTitle);
+
+  // Recalculate risk tier if either side is a CAPA
+  const recalcCAPARisk = (capaId) => {
+    setRecords(prev => {
+      const capaRecord = prev.capa?.find(r => r.id === capaId);
+      if (!capaRecord) return prev;
+      const { riskTier, riskFactors } = calculateCAPARisk(prev, capaRecord);
+      return {
+        ...prev,
+        capa: prev.capa.map(r =>
+          r.id === capaId ? { ...r, riskTier, riskFactors } : r
+        )
+      };
+    });
+  };
+
+  if (linkSource.module === 'capa') {
+    recalcCAPARisk(linkSource.id);
+    addAuditEntry('capa', linkSource.id, 'Risk Tier Recalculated', 'Risk recalculated after linking new record');
+  }
+  if (targetModule === 'capa') {
+    recalcCAPARisk(targetId);
+    addAuditEntry('capa', targetId, 'Risk Tier Recalculated', 'Risk recalculated after linking new record');
+  }
+
   setShowLinkExisting(false);
   setLinkSource(null);
 };
 const handleInitiateCAPA = (capaData) => {
   const newCapaRecord = addRecord('capa', capaData);
-  
+
   linkRecords(
     capaSource.module,
     capaSource.recordId,
@@ -2638,6 +2831,24 @@ const handleInitiateCAPA = (capaData) => {
     capaSource.title || capaSource.testName,
     newCapaRecord.title
   );
+
+  // Auto-calculate CAPA risk tier from source record data
+  const tempCapaForCalc = {
+    ...newCapaRecord,
+    linkedRecords: [{ module: capaSource.module, id: capaSource.recordId, title: capaSource.recordTitle }]
+  };
+  const { riskTier, riskFactors } = calculateCAPARisk(records, tempCapaForCalc);
+
+  setRecords(prev => ({
+    ...prev,
+    capa: prev.capa.map(r =>
+      r.id === newCapaRecord.id
+        ? { ...r, riskTier, riskFactors }
+        : r
+    )
+  }));
+
+  addAuditEntry('capa', newCapaRecord.id, 'Risk Tier Auto-Calculated', `Risk tier: ${riskTier} (${riskFactors.length} factor${riskFactors.length !== 1 ? 's' : ''} evaluated)`);
 
   setShowInitiateCAPA(false);
   setCapaSource(null);
@@ -2795,7 +3006,8 @@ const RCAModule = () => {
   const [form, setForm] = useState({
     title: '',
     problemStatement: '',
-    processArea: ''
+    processArea: '',
+    severity: 'Medium'
   });
 
   const isFormValid = form.title.trim() && form.problemStatement.trim();
@@ -2854,6 +3066,22 @@ const RCAModule = () => {
             value={form.processArea}
             onChange={(e) => setForm({ ...form, processArea: e.target.value })}
           />
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Overall Severity
+            </label>
+            <select
+              className="w-full p-2 border rounded"
+              value={form.severity}
+              onChange={(e) => setForm({ ...form, severity: e.target.value })}
+            >
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
 
           <button
             disabled={!isFormValid}
@@ -3058,6 +3286,7 @@ const RCAModule = () => {
     testName: '',
     result: '',
     specification: '',
+    severity: 'Medium',
     investigation: ''
   });
 
@@ -3139,6 +3368,23 @@ const RCAModule = () => {
             />
           </div>
 
+          {/* Severity */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Severity
+            </label>
+            <select
+              className="w-full p-2 border rounded"
+              value={form.severity}
+              onChange={(e) => setForm({ ...form, severity: e.target.value })}
+            >
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+
           {/* Investigation */}
           <div className="col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3168,6 +3414,7 @@ const RCAModule = () => {
                 testName: '',
                 result: '',
                 specification: '',
+                severity: 'Medium',
                 investigation: ''
               });
             }}
@@ -3825,7 +4072,10 @@ const VendorModule = () => {
                 <h4 className="font-medium text-gray-800">
                   {record.title || record.testName || record.vendorName || record.riskTitle || record.productName || record.auditTitle}
                 </h4>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                  {module === 'capa' && record.riskTier && (
+                    <RiskTierBadge tier={record.riskTier} />
+                  )}
                   <span className={`px-3 py-1 rounded text-xs font-medium ${
                     record.approvalStatus === 'Approved' ? 'bg-green-100 text-green-800' :
                     record.approvalStatus === 'Rejected' ? 'bg-red-100 text-red-800' :
@@ -4180,11 +4430,27 @@ const Documentation = () => {
                 Closed-Loop CAPA Management
               </h3>
               <ul className="space-y-2 text-gray-700 dark:text-gray-300">
-                <li>• Initiate from Complaints/OOT</li>
+                <li>• Initiate from Complaints, OOT, or RCA</li>
                 <li>• Root cause & corrective/preventive actions</li>
                 <li>• Multi-level e-signature approval</li>
                 <li>• Automatic 30-day effectiveness check</li>
                 <li>• Re-open if ineffective</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-orange-600 dark:text-orange-400 mb-3">
+                Root Cause Analysis (RCA) with Fishbone Diagram
+              </h3>
+              <ul className="space-y-2 text-gray-700 dark:text-gray-300">
+                <li>• Interactive Ishikawa (Fishbone) diagram with 6M categories</li>
+                <li>• Man, Machine, Method, Material, Measurement, Environment</li>
+                <li>• Add causes per category with severity levels (Low to Critical)</li>
+                <li>• Visual severity color-coding on diagram branches</li>
+                <li>• Zoom, pan, and reset controls for large diagrams</li>
+                <li>• Auto collision detection prevents overlapping cause labels</li>
+                <li>• Lock fishbone analysis to preserve data integrity</li>
+                <li>• Select root cause and document conclusions</li>
+                <li>• Initiate CAPA directly from identified root causes</li>
               </ul>
             </div>
             <div>
@@ -4221,6 +4487,17 @@ const Documentation = () => {
                 <li>• Professional audit-ready formatting</li>
               </ul>
             </div>
+            <div>
+              <h3 className="text-xl font-semibold text-red-600 dark:text-red-400 mb-3">
+                Quality Risk Management
+              </h3>
+              <ul className="space-y-2 text-gray-700 dark:text-gray-300">
+                <li>• Risk identification and assessment</li>
+                <li>• Probability x Severity scoring</li>
+                <li>• Automatic risk level calculation (Low/Medium/High)</li>
+                <li>• Mitigation planning and tracking</li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
@@ -4250,7 +4527,7 @@ const Documentation = () => {
               <td className="px-6 py-4 font-medium">CAPA</td>
               <td className="px-6 py-4">Corrective & Preventive Actions</td>
               <td className="px-6 py-4">Title, Root Cause, Actions</td>
-              <td className="px-6 py-4">Open → Closed → Effectiveness → Closed</td>
+              <td className="px-6 py-4">Open → Closed → Effectiveness Check → Closed</td>
             </tr>
             <tr>
               <td className="px-6 py-4 font-medium">OOT</td>
@@ -4258,15 +4535,102 @@ const Documentation = () => {
               <td className="px-6 py-4">Test Name, Result, Specification</td>
               <td className="px-6 py-4">Open → In Progress → Closed</td>
             </tr>
+            <tr className="bg-orange-50 dark:bg-orange-900/20">
+              <td className="px-6 py-4 font-medium text-orange-700 dark:text-orange-400">Root Cause Analysis</td>
+              <td className="px-6 py-4">Fishbone (Ishikawa) analysis for systematic root cause identification</td>
+              <td className="px-6 py-4">Problem Statement, 6M Categories, Causes with Severity, Fishbone Diagram</td>
+              <td className="px-6 py-4">Draft → Analysis → Root Cause Selected → CAPA Initiated</td>
+            </tr>
             <tr>
               <td className="px-6 py-4 font-medium">Audit Management</td>
               <td className="px-6 py-4">Internal/external audits</td>
               <td className="px-6 py-4">Title, Type, Date, Auditor</td>
               <td className="px-6 py-4">Scheduled → In Progress → Closed</td>
             </tr>
-            {/* Add other modules as needed */}
+            <tr>
+              <td className="px-6 py-4 font-medium">Vendor Qualification</td>
+              <td className="px-6 py-4">Vendor management & qualification tracking</td>
+              <td className="px-6 py-4">Vendor Name, Category, Status, Audit Date</td>
+              <td className="px-6 py-4">Pending → Qualified</td>
+            </tr>
+            <tr>
+              <td className="px-6 py-4 font-medium">Quality Risk Management</td>
+              <td className="px-6 py-4">Risk identification, assessment & mitigation</td>
+              <td className="px-6 py-4">Risk Description, Probability, Severity, Mitigation</td>
+              <td className="px-6 py-4">Identified → Assessed → Mitigated</td>
+            </tr>
+            <tr>
+              <td className="px-6 py-4 font-medium">Product Recall</td>
+              <td className="px-6 py-4">Product recall initiation & tracking</td>
+              <td className="px-6 py-4">Product, Batch Number, Reason, Classification</td>
+              <td className="px-6 py-4">Initiated → In Progress → Closed</td>
+            </tr>
           </tbody>
         </table>
+      </section>
+
+      {/* RCA Fishbone Deep Dive */}
+      <section className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-200 dark:border-gray-700 p-10">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-8 flex items-center gap-4">
+          <AlertTriangle className="w-10 h-10 text-orange-500" />
+          Root Cause Analysis - Fishbone Diagram
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400 text-lg mb-8">
+          The RCA module provides a structured approach to identifying the true root cause of quality events using the
+          Ishikawa (Fishbone) methodology. It follows the industry-standard 6M framework to systematically evaluate
+          all potential contributing factors.
+        </p>
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-6 border border-blue-200 dark:border-blue-800">
+            <h4 className="font-bold text-blue-700 dark:text-blue-400 mb-3">6M Categories</h4>
+            <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+              <li>• <strong>Man</strong> - Human factors, training gaps</li>
+              <li>• <strong>Machine</strong> - Equipment, tools, systems</li>
+              <li>• <strong>Method</strong> - SOPs, procedures, processes</li>
+              <li>• <strong>Material</strong> - Raw materials, suppliers</li>
+              <li>• <strong>Measurement</strong> - Testing, calibration</li>
+              <li>• <strong>Environment</strong> - Facility conditions</li>
+            </ul>
+          </div>
+          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-2xl p-6 border border-orange-200 dark:border-orange-800">
+            <h4 className="font-bold text-orange-700 dark:text-orange-400 mb-3">Diagram Features</h4>
+            <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+              <li>• Interactive SVG fishbone visualization</li>
+              <li>• Severity color-coded branches</li>
+              <li>• Zoom in/out and pan controls</li>
+              <li>• Auto collision detection for labels</li>
+              <li>• Dynamic sizing based on content</li>
+              <li>• Severity legend (Low to Critical)</li>
+            </ul>
+          </div>
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-2xl p-6 border border-green-200 dark:border-green-800">
+            <h4 className="font-bold text-green-700 dark:text-green-400 mb-3">Workflow Integration</h4>
+            <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+              <li>• Create RCA from any quality event</li>
+              <li>• Add causes per category with severity</li>
+              <li>• Lock analysis when investigation is complete</li>
+              <li>• Select identified root cause</li>
+              <li>• Document conclusions</li>
+              <li>• Initiate CAPA directly from RCA</li>
+            </ul>
+          </div>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-2xl p-6">
+          <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-3">RCA Process Steps</h4>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 px-4 py-2 rounded-full font-medium">1. Define Problem</span>
+            <span className="text-gray-400">→</span>
+            <span className="bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 px-4 py-2 rounded-full font-medium">2. Add Causes (6M)</span>
+            <span className="text-gray-400">→</span>
+            <span className="bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 px-4 py-2 rounded-full font-medium">3. Assign Severity</span>
+            <span className="text-gray-400">→</span>
+            <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 px-4 py-2 rounded-full font-medium">4. Review Fishbone</span>
+            <span className="text-gray-400">→</span>
+            <span className="bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 px-4 py-2 rounded-full font-medium">5. Select Root Cause</span>
+            <span className="text-gray-400">→</span>
+            <span className="bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 px-4 py-2 rounded-full font-medium">6. Initiate CAPA</span>
+          </div>
+        </div>
       </section>
 
       {/* Process Flow */}
@@ -4274,12 +4638,14 @@ const Documentation = () => {
         <h2 className="text-3xl font-bold mb-8">Typical Process Flow</h2>
         <ol className="space-y-6 text-lg">
           <li>1. Log a Market Complaint or OOT</li>
-          <li>2. Initiate CAPA → auto-linked</li>
-          <li>3. Complete root cause & actions</li>
-          <li>4. Multi-level approval (e-signatures)</li>
-          <li>5. Close CAPA → 30-day effectiveness check scheduled</li>
-          <li>6. Reviewer confirms effectiveness</li>
-          <li>7. Export full report for audit</li>
+          <li>2. Perform Root Cause Analysis using Fishbone (6M) diagram</li>
+          <li>3. Identify and document root cause with severity assessment</li>
+          <li>4. Initiate CAPA from RCA findings → auto-linked</li>
+          <li>5. Define corrective & preventive actions</li>
+          <li>6. Multi-level approval (e-signatures)</li>
+          <li>7. Close CAPA → 30-day effectiveness check scheduled</li>
+          <li>8. Reviewer confirms effectiveness</li>
+          <li>9. Export full report for audit</li>
         </ol>
       </section>
 

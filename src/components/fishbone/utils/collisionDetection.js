@@ -3,8 +3,26 @@
  * Prevents overlapping of causes in the fishbone diagram
  */
 
+// Padding added around each bounding box for comfortable spacing
+const COLLISION_PADDING = 8;
+
 /**
- * Check if two bounding boxes overlap
+ * Expand a bounding box by padding on all sides
+ * @param {Object} box - Bounding box { x, y, width, height }
+ * @param {number} pad - Padding in pixels
+ * @returns {Object} Expanded bounding box
+ */
+function padBox(box, pad = COLLISION_PADDING) {
+  return {
+    x: box.x - pad,
+    y: box.y - pad,
+    width: box.width + pad * 2,
+    height: box.height + pad * 2
+  };
+}
+
+/**
+ * Check if two bounding boxes overlap (with padding)
  * @param {Object} box1 - First bounding box { x, y, width, height }
  * @param {Object} box2 - Second bounding box { x, y, width, height }
  * @returns {boolean} True if boxes overlap
@@ -12,11 +30,14 @@
 export function checkCollision(box1, box2) {
   if (!box1 || !box2) return false;
 
+  const a = padBox(box1);
+  const b = padBox(box2);
+
   return !(
-    box1.x + box1.width < box2.x ||
-    box2.x + box2.width < box1.x ||
-    box1.y + box1.height < box2.y ||
-    box2.y + box2.height < box1.y
+    a.x + a.width < b.x ||
+    b.x + b.width < a.x ||
+    a.y + a.height < b.y ||
+    b.y + b.height < a.y
   );
 }
 
@@ -33,60 +54,75 @@ export function calculateDistance(p1, p2) {
 }
 
 /**
+ * Shift a cause layout (and its subcauses) by a vertical amount
+ * @param {Object} causeLayout - Cause layout object
+ * @param {number} shiftY - Vertical shift in pixels
+ */
+function shiftCause(causeLayout, shiftY) {
+  causeLayout.textPos.y += shiftY;
+  causeLayout.branchEnd.y += shiftY;
+  causeLayout.branchStart.y += shiftY;
+  causeLayout.bounds.y += shiftY;
+
+  // Also shift subcauses
+  if (causeLayout.subCauses && causeLayout.subCauses.length > 0) {
+    causeLayout.subCauses.forEach(sub => {
+      sub.textPos.y += shiftY;
+      sub.branchEnd.y += shiftY;
+      sub.branchStart.y += shiftY;
+      sub.bounds.y += shiftY;
+    });
+  }
+}
+
+/**
  * Adjust layout to prevent overlaps within a category
+ * Uses multiple passes to ensure all collisions are resolved
  * @param {Array} causeLayouts - Array of cause layout objects
  * @param {boolean} isTop - Whether category is on top
  * @param {number} minSpacing - Minimum spacing to maintain
  * @returns {Array} Adjusted layout objects
  */
-export function resolveCollisions(causeLayouts, isTop, minSpacing = 10) {
-  if (!causeLayouts || causeLayouts.length === 0) return causeLayouts;
+export function resolveCollisions(causeLayouts, isTop, minSpacing = 15) {
+  if (!causeLayouts || causeLayouts.length < 2) return causeLayouts;
 
-  const adjusted = [...causeLayouts];
+  const adjusted = causeLayouts.map(c => ({ ...c }));
   const direction = isTop ? -1 : 1;
+  const maxPasses = 5;
 
-  // Check each pair of consecutive causes
-  for (let i = 0; i < adjusted.length - 1; i++) {
-    const current = adjusted[i];
-    const next = adjusted[i + 1];
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let hadCollision = false;
 
-    if (!current.bounds || !next.bounds) continue;
+    for (let i = 0; i < adjusted.length - 1; i++) {
+      const current = adjusted[i];
+      const next = adjusted[i + 1];
 
-    // Check for collision
-    if (checkCollision(current.bounds, next.bounds)) {
-      // Calculate overlap amount
-      const overlapY = isTop
-        ? current.bounds.y - (next.bounds.y + next.bounds.height)
-        : (current.bounds.y + current.bounds.height) - next.bounds.y;
+      if (!current.bounds || !next.bounds) continue;
 
-      // Shift next cause to resolve collision
-      const shiftAmount = Math.abs(overlapY) + minSpacing;
+      if (checkCollision(current.bounds, next.bounds)) {
+        hadCollision = true;
 
-      // Update next cause position
-      next.textPos.y += shiftAmount * direction;
-      next.branchEnd.y += shiftAmount * direction;
-      next.branchStart.y += shiftAmount * direction;
-      next.bounds.y += shiftAmount * direction;
+        // Calculate required shift based on direction
+        let overlapAmount;
+        if (isTop) {
+          // Top causes: next should be further up (lower y)
+          overlapAmount = (next.bounds.y + next.bounds.height) - current.bounds.y;
+        } else {
+          // Bottom causes: next should be further down (higher y)
+          overlapAmount = (current.bounds.y + current.bounds.height) - next.bounds.y;
+        }
 
-      // Recursively check if this shift causes collision with subsequent causes
-      for (let j = i + 1; j < adjusted.length - 1; j++) {
-        const curr = adjusted[j];
-        const following = adjusted[j + 1];
+        const shiftAmount = (Math.abs(overlapAmount) + minSpacing) * direction;
 
-        if (checkCollision(curr.bounds, following.bounds)) {
-          const shift = Math.abs(
-            isTop
-              ? curr.bounds.y - (following.bounds.y + following.bounds.height)
-              : (curr.bounds.y + curr.bounds.height) - following.bounds.y
-          ) + minSpacing;
-
-          following.textPos.y += shift * direction;
-          following.branchEnd.y += shift * direction;
-          following.branchStart.y += shift * direction;
-          following.bounds.y += shift * direction;
+        // Shift this cause and all subsequent causes
+        for (let j = i + 1; j < adjusted.length; j++) {
+          shiftCause(adjusted[j], shiftAmount);
         }
       }
     }
+
+    // Stop early if no collisions were found
+    if (!hadCollision) break;
   }
 
   return adjusted;
@@ -114,15 +150,65 @@ export function hasOverlaps(categoryLayout) {
 }
 
 /**
+ * Resolve cross-category collisions (causes from different categories that overlap)
+ * @param {Array} categoryLayouts - Array of category layout objects
+ * @returns {Array} Adjusted category layouts
+ */
+function resolveCrossCategoryCollisions(categoryLayouts) {
+  // Collect all cause bounds grouped by side (top / bottom)
+  const topCategories = categoryLayouts.filter(c => c.isTop);
+  const bottomCategories = categoryLayouts.filter(c => !c.isTop);
+
+  [topCategories, bottomCategories].forEach(sideCategories => {
+    for (let ci = 0; ci < sideCategories.length; ci++) {
+      for (let cj = ci + 1; cj < sideCategories.length; cj++) {
+        const catA = sideCategories[ci];
+        const catB = sideCategories[cj];
+        const isTop = catA.isTop;
+        const direction = isTop ? -1 : 1;
+
+        catA.causes.forEach(causeA => {
+          catB.causes.forEach(causeB => {
+            if (!causeA.bounds || !causeB.bounds) return;
+
+            if (checkCollision(causeA.bounds, causeB.bounds)) {
+              // Shift the cause that is closer to the spine further away
+              let overlapAmount;
+              if (isTop) {
+                overlapAmount = (causeB.bounds.y + causeB.bounds.height) - causeA.bounds.y;
+              } else {
+                overlapAmount = (causeA.bounds.y + causeA.bounds.height) - causeB.bounds.y;
+              }
+
+              const shiftAmount = (Math.abs(overlapAmount) + 12) * direction;
+              shiftCause(causeB, shiftAmount);
+            }
+          });
+        });
+      }
+    }
+  });
+
+  return categoryLayouts;
+}
+
+/**
  * Apply collision resolution to all categories in a layout
+ * Resolves within-category collisions first, then cross-category
  * @param {Array} categoryLayouts - Array of category layout objects
  * @returns {Array} Adjusted category layouts
  */
 export function resolveAllCollisions(categoryLayouts) {
-  return categoryLayouts.map(catLayout => ({
+  // Phase 1: Resolve within each category
+  let resolved = categoryLayouts.map(catLayout => ({
     ...catLayout,
     causes: resolveCollisions(catLayout.causes, catLayout.isTop)
   }));
+
+  // Phase 2: Resolve cross-category collisions
+  resolved = resolveCrossCategoryCollisions(resolved);
+
+  return resolved;
 }
 
 export default {

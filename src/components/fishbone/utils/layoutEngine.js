@@ -140,13 +140,13 @@ function layoutCauses(causes, startX, startY, isTop, spacing, maxWidth, includeS
   const layouts = [];
   let currentY = startY;
   const direction = isTop ? -1 : 1;
-  const branchLength = 150; // Length of cause branch (increased from 100)
-  const minGap = 30; // Minimum gap between cause texts (increased from 25)
+  const branchLength = 150;
+  const minGap = 40; // Increased gap between cause texts for better readability
 
   causes.forEach((cause, index) => {
     // For first cause, add initial offset
     if (index === 0) {
-      currentY = currentY + (spacing * 2 * direction); // Increased from 1.5
+      currentY = currentY + (spacing * 2.5 * direction); // Increased initial offset
     }
 
     const causeY = currentY;
@@ -178,7 +178,7 @@ function layoutCauses(causes, startX, startY, isTop, spacing, maxWidth, includeS
         causeEndX,
         causeY,
         isTop,
-        spacing * 0.7, // Smaller spacing for subcauses
+        spacing * 0.7,
         maxWidth * 0.9,
         1
       );
@@ -245,11 +245,13 @@ export function calculateFishboneLayout(fishboneData, options = {}) {
   const maxCauses = Math.max(...categoryCounts, 4);
   const requiredHeight = Math.max(
     minHeight,
-    maxCauses * minCauseSpacing * 3.5 + padding * 2  // Increased multiplier for better spacing
+    maxCauses * minCauseSpacing * 4.5 + padding * 2  // Increased multiplier for more vertical room
   );
 
-  // Step 3: Calculate SVG dimensions
-  const svgWidth = Math.max(minWidth, maxCauseWidth * 5);
+  // Step 3: Calculate SVG dimensions - wider to spread categories apart
+  const numCategories = fishboneData.categories.length;
+  const minWidthForCategories = Math.max(minWidth, numCategories * 220 + padding * 2);
+  const svgWidth = Math.max(minWidthForCategories, maxCauseWidth * 6);
   const svgHeight = requiredHeight;
 
   // Step 4: Spine coordinates (horizontal arrow through center)
@@ -265,19 +267,18 @@ export function calculateFishboneLayout(fishboneData, options = {}) {
   };
 
   // Step 6: Category bone positions (alternate top/bottom)
-  const numCategories = fishboneData.categories.length;
   const categoriesPerSide = Math.ceil(numCategories / 2);
-  const categorySpacing = (spineEndX - spineStartX - padding * 2) / categoriesPerSide;
+  const categorySpacing = (spineEndX - spineStartX - padding * 2) / Math.max(categoriesPerSide, 1);
 
   const categoryLayouts = fishboneData.categories.map((category, index) => {
     const isTop = index % 2 === 0;
     const columnIndex = Math.floor(index / 2);
 
-    // Category bone anchor point on spine
+    // Category bone anchor point on spine - spread evenly
     const anchorX = spineStartX + padding + columnIndex * categorySpacing + categorySpacing / 2;
 
-    // Calculate category bone endpoint
-    const boneLength = 120;
+    // Calculate category bone endpoint - longer bones for more separation
+    const boneLength = 140;
     const angleRad = (branchAngle * Math.PI) / 180;
     const endX = anchorX - boneLength * Math.cos(angleRad);
     const endY = isTop
