@@ -211,10 +211,12 @@ export function resolveAllCollisions(categoryLayouts) {
   return resolved;
 }
 
-export default {
+const collisionDetection = {
   checkCollision,
   calculateDistance,
   resolveCollisions,
   hasOverlaps,
   resolveAllCollisions
 };
+
+export default collisionDetection;
