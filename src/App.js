@@ -684,6 +684,24 @@ useEffect(() => {
       effectivenessChecked: false,
       riskTier: "High",
       riskFactors: [{ source: "Complaint", sourceId: "1001", field: "severity", value: "Critical" }],
+      effectivenessEvidence: [
+        {
+          id: "ev-1",
+          type: "KPI / Trend",
+          description: "Zero packaging leaks reported for 3 months post-fix",
+          fileName: "leakage_trend_q1_2026.pdf",
+          uploadedBy: "QA Analyst",
+          uploadedDate: "2026-01-10"
+        },
+        {
+          id: "ev-2",
+          type: "Audit Result",
+          description: "Follow-up packaging audit passed with zero findings",
+          fileName: "packaging_audit_report.pdf",
+          uploadedBy: "QA Manager",
+          uploadedDate: "2026-01-12"
+        }
+      ],
       linkedRecords: [{ module: "complaints", id: "1001", title: "Packaging Leakage - Batch XYZ123" }],
       approvalChain: [
         { role: "QA Manager", status: "Approved", date: "2025-12-20" },
@@ -1367,7 +1385,7 @@ useEffect(() => {
       ],
       emailsSent: [],
       linkedRecords: [],  // Empty array for links
-      ...(module === 'capa' ? { riskTier: data.riskTier || 'Low', riskFactors: data.riskFactors || [] } : {})
+      ...(module === 'capa' ? { riskTier: data.riskTier || 'Low', riskFactors: data.riskFactors || [], effectivenessEvidence: [] } : {})
     };
     setRecords(prev => ({
       ...prev,
@@ -1394,7 +1412,8 @@ useEffect(() => {
             ...r,
             status: 'Effectiveness Pending',
             effectivenessDueDate: effectivenessDue.toLocaleDateString(),
-            effectivenessChecked: false
+            effectivenessChecked: false,
+            effectivenessEvidence: r.effectivenessEvidence || []
           };
         }
 
@@ -1490,6 +1509,42 @@ useEffect(() => {
   addNotification(`CAPA Effectiveness: ${result}`, isEffective ? 'success' : 'warning');
   addAuditEntry('capa', capaId, 'Effectiveness Check', `${result} - Note: ${reviewerNote || 'None'} (Signed by ${signer})`, signer);
 };
+
+  const addEffectivenessEvidence = (capaId, evidence, file) => {
+    const evidenceItem = {
+      id: `ev-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      ...evidence,
+      fileName: file.name,
+      fileSize: file.size,
+      uploadedBy: 'Current User',
+      uploadedDate: new Date().toLocaleDateString()
+    };
+    setRecords(prev => ({
+      ...prev,
+      capa: prev.capa.map(r =>
+        r.id === capaId
+          ? { ...r, effectivenessEvidence: [...(r.effectivenessEvidence || []), evidenceItem] }
+          : r
+      )
+    }));
+    addNotification(`Evidence uploaded: ${file.name}`, 'success');
+    addAuditEntry('capa', capaId, 'Evidence Added', `${evidence.type}: ${evidence.description} (File: ${file.name}, ${(file.size / 1024).toFixed(1)} KB)`);
+  };
+
+  const removeEffectivenessEvidence = (capaId, evidenceId) => {
+    setRecords(prev => ({
+      ...prev,
+      capa: prev.capa.map(r => {
+        if (r.id === capaId && !r.effectivenessChecked) {
+          return { ...r, effectivenessEvidence: (r.effectivenessEvidence || []).filter(ev => ev.id !== evidenceId) };
+        }
+        return r;
+      })
+    }));
+    addNotification('Effectiveness evidence removed', 'info');
+    addAuditEntry('capa', capaId, 'Evidence Removed', `Evidence item ${evidenceId} removed`);
+  };
+
   const approveRecord = (module, recordId, approverRole,signer) => {
     setRecords(prev => ({
       ...prev,
@@ -1902,7 +1957,8 @@ const MetricCard = ({ title, value, trend, trendUp, color, icon: Icon, bgGradien
     'id',
     'createdBy',
     'linkedRecords',
-    'riskFactors'
+    'riskFactors',
+    'effectivenessEvidence'
   ];
 
   return Object.entries(record)
@@ -2342,36 +2398,222 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
               <p className="text-2xl font-bold text-blue-600">{record.attachments.length}</p>
             </div>
           </div>
-          {/* CAPA Effectiveness Check - Only for CAPA module */}
+          {/* CAPA Effectiveness Verification - Only for CAPA module */}
           {module === 'capa' && (
             <div className={`rounded-xl p-6 border ${record.status === 'Effectiveness Pending' ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'}`} onClick={(e) => e.stopPropagation()}>
               <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <CheckCircle className={`w-6 h-6 ${record.status === 'Effectiveness Pending' ? 'text-amber-600' : 'text-green-600'}`} />
-                CAPA Effectiveness Check
+                <Shield className={`w-6 h-6 ${record.status === 'Effectiveness Pending' ? 'text-amber-600' : record.effectivenessChecked ? 'text-green-600' : 'text-gray-400'}`} />
+                CAPA Effectiveness Verification
               </h3>
 
               {record.effectivenessChecked ? (
-                <div className="space-y-3">
-                  <p className="font-medium">
-                    Result: <span className={`px-3 py-1 rounded-full text-sm ${record.effectivenessResult === 'Effective' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {record.effectivenessResult}
-                    </span>
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Reviewed on: {record.effectivenessDate} by {record.effectivenessReviewer}
-                  </p>
-                  {record.effectivenessNote && (
-                    <p className="text-sm italic text-gray-700 dark:text-gray-300">
-                      Note: {record.effectivenessNote}
+                /* ── Completed State ── */
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <p className="font-medium">
+                      Result: <span className={`px-3 py-1 rounded-full text-sm ${record.effectivenessResult === 'Effective' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {record.effectivenessResult}
+                      </span>
                     </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Reviewed on: {record.effectivenessDate} by {record.effectivenessReviewer}
+                    </p>
+                    {record.effectivenessNote && (
+                      <p className="text-sm italic text-gray-700 dark:text-gray-300">
+                        Note: {record.effectivenessNote}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Evidence List - Read Only After Approval */}
+                  {(record.effectivenessEvidence || []).length > 0 && (
+                    <div className="mt-4 border-t border-gray-200 dark:border-gray-600 pt-4">
+                      <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        Submitted Evidence ({record.effectivenessEvidence.length})
+                        <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 text-xs rounded-full">Locked</span>
+                      </h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200 dark:border-gray-600">
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Description</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">File</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Uploaded By</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {record.effectivenessEvidence.map((ev) => (
+                              <tr key={ev.id} className="border-b border-gray-100 dark:border-gray-700">
+                                <td className="py-2 px-3"><span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs rounded-full">{ev.type}</span></td>
+                                <td className="py-2 px-3 text-gray-700 dark:text-gray-300">{ev.description}</td>
+                                <td className="py-2 px-3"><span className="text-gray-700 dark:text-gray-300 text-xs">{ev.fileName}</span>{ev.fileSize && <span className="text-gray-400 dark:text-gray-500 text-xs ml-1">({(ev.fileSize / 1024).toFixed(1)} KB)</span>}</td>
+                                <td className="py-2 px-3 text-gray-600 dark:text-gray-400">{ev.uploadedBy}</td>
+                                <td className="py-2 px-3 text-gray-600 dark:text-gray-400">{ev.uploadedDate}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   )}
                 </div>
+
               ) : record.status === 'Effectiveness Pending' ? (
-                <div className="space-y-4">
+                /* ── Pending State: Evidence + Decision ── */
+                <div className="space-y-6">
                   <p className="text-amber-800 dark:text-amber-300 font-medium">
                     Effectiveness review due by: <strong>{record.effectivenessDueDate}</strong>
                   </p>
-                  <div className="flex gap-4">
+
+                  {/* Evidence Upload Form */}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-amber-200 dark:border-amber-700 p-4">
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-3 flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      Upload Effectiveness Evidence
+                      {record.riskTier === 'High' && <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium">Required for High Risk</span>}
+                      {record.riskTier === 'Medium' && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">Recommended</span>}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                      <select
+                        id={`ev-type-${record.id}`}
+                        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm"
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Evidence Type...</option>
+                        <option value="KPI / Trend">KPI / Trend</option>
+                        <option value="Lab Data">Lab Data</option>
+                        <option value="Audit Result">Audit Result</option>
+                        <option value="Process Metric">Process Metric</option>
+                        <option value="Training Proof">Training Proof</option>
+                        <option value="SOP Change">SOP Change</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <input
+                        id={`ev-desc-${record.id}`}
+                        type="text"
+                        placeholder="Description of evidence..."
+                        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm"
+                      />
+                    </div>
+                    {/* File Upload Area */}
+                    <label className="flex items-center justify-center gap-3 p-4 mb-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition">
+                      <Upload className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                      <span id={`ev-file-label-${record.id}`} className="text-gray-600 dark:text-gray-400 text-sm font-medium">
+                        Click to select file (PDF, image, spreadsheet, etc.)
+                      </span>
+                      <input
+                        id={`ev-file-${record.id}`}
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.ppt,.pptx,.txt"
+                        onChange={(e) => {
+                          const label = document.getElementById(`ev-file-label-${record.id}`);
+                          if (e.target.files[0] && label) {
+                            const f = e.target.files[0];
+                            label.textContent = `${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+                            label.className = 'text-blue-700 dark:text-blue-300 text-sm font-medium';
+                          }
+                        }}
+                      />
+                    </label>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const typeEl = document.getElementById(`ev-type-${record.id}`);
+                        const descEl = document.getElementById(`ev-desc-${record.id}`);
+                        const fileEl = document.getElementById(`ev-file-${record.id}`);
+                        const labelEl = document.getElementById(`ev-file-label-${record.id}`);
+                        const evType = typeEl?.value;
+                        const evDesc = descEl?.value?.trim();
+                        const file = fileEl?.files?.[0];
+                        if (!evType || !evDesc || !file) {
+                          alert('Please select an evidence type, provide a description, and upload a file.');
+                          return;
+                        }
+                        addEffectivenessEvidence(record.id, { type: evType, description: evDesc }, file);
+                        if (typeEl) typeEl.value = '';
+                        if (descEl) descEl.value = '';
+                        if (fileEl) fileEl.value = '';
+                        if (labelEl) {
+                          labelEl.textContent = 'Click to select file (PDF, image, spreadsheet, etc.)';
+                          labelEl.className = 'text-gray-600 dark:text-gray-400 text-sm font-medium';
+                        }
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-medium transition-colors flex items-center gap-2"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Upload Evidence
+                    </button>
+                  </div>
+
+                  {/* Evidence List */}
+                  {(record.effectivenessEvidence || []).length > 0 && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                      <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        Submitted Evidence ({record.effectivenessEvidence.length})
+                      </h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200 dark:border-gray-600">
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Description</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">File</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Uploaded By</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {record.effectivenessEvidence.map((ev) => (
+                              <tr key={ev.id} className="border-b border-gray-100 dark:border-gray-700">
+                                <td className="py-2 px-3"><span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs rounded-full">{ev.type}</span></td>
+                                <td className="py-2 px-3 text-gray-700 dark:text-gray-300">{ev.description}</td>
+                                <td className="py-2 px-3"><span className="text-gray-700 dark:text-gray-300 text-xs">{ev.fileName}</span>{ev.fileSize && <span className="text-gray-400 dark:text-gray-500 text-xs ml-1">({(ev.fileSize / 1024).toFixed(1)} KB)</span>}</td>
+                                <td className="py-2 px-3 text-gray-600 dark:text-gray-400">{ev.uploadedBy}</td>
+                                <td className="py-2 px-3 text-gray-600 dark:text-gray-400">{ev.uploadedDate}</td>
+                                <td className="py-2 px-3">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); removeEffectivenessEvidence(record.id, ev.id); }}
+                                    className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                                    title="Remove evidence"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Enforcement Warning for High Risk */}
+                  {record.riskTier === 'High' && (record.effectivenessEvidence || []).length === 0 && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                      <p className="text-sm text-red-700 dark:text-red-300">
+                        High-risk CAPAs require at least one evidence item before marking effective.
+                      </p>
+                    </div>
+                  )}
+
+                  {record.riskTier === 'Medium' && (record.effectivenessEvidence || []).length === 0 && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                        Evidence is recommended for Medium-risk CAPAs.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Effectiveness Decision Buttons */}
+                  <div className="flex gap-4 pt-2">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -2382,8 +2624,14 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
                         });
                         setShowESignature(true);
                       }}
-                      className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow transition"
+                      disabled={record.riskTier === 'High' && (record.effectivenessEvidence || []).length === 0}
+                      className={`px-6 py-3 rounded-lg shadow transition font-medium flex items-center gap-2 ${
+                        record.riskTier === 'High' && (record.effectivenessEvidence || []).length === 0
+                          ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                          : 'bg-green-600 hover:bg-green-700 text-white'
+                      }`}
                     >
+                      <CheckCircle className="w-5 h-5" />
                       Mark as Effective
                     </button>
                     <button
@@ -2400,12 +2648,14 @@ const RecordDetailModal = ({ record, module, onClose, setShowESignature, setPend
                           setShowESignature(true);
                         }
                       }}
-                      className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow transition"
+                      className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow transition font-medium flex items-center gap-2"
                     >
+                      <X className="w-5 h-5" />
                       Mark as Ineffective
                     </button>
                   </div>
                 </div>
+
               ) : (
                 <p className="text-gray-600 dark:text-gray-400">
                   Effectiveness check will be scheduled upon closure.
@@ -2832,12 +3082,23 @@ const handleInitiateCAPA = (capaData) => {
     newCapaRecord.title
   );
 
-  // Auto-calculate CAPA risk tier from source record data
+  // Auto-calculate CAPA risk tier from source record data + form severity
   const tempCapaForCalc = {
     ...newCapaRecord,
     linkedRecords: [{ module: capaSource.module, id: capaSource.recordId, title: capaSource.recordTitle }]
   };
-  const { riskTier, riskFactors } = calculateCAPARisk(records, tempCapaForCalc);
+  const { riskTier: linkedRiskTier, riskFactors } = calculateCAPARisk(records, tempCapaForCalc);
+
+  // Also derive tier from form severity as a baseline
+  const severityToRisk = { Critical: 'High', High: 'High', Medium: 'Medium', Low: 'Low' };
+  const formRiskTier = severityToRisk[capaData.severity] || 'Low';
+  if (capaData.severity) {
+    riskFactors.push({ source: 'CAPA Severity', sourceId: 'self', field: 'severity', value: capaData.severity });
+  }
+
+  // Use the higher of linked-record risk vs form severity risk
+  const tierRank = { Low: 0, Medium: 1, High: 2 };
+  const riskTier = tierRank[linkedRiskTier] >= tierRank[formRiskTier] ? linkedRiskTier : formRiskTier;
 
   setRecords(prev => ({
     ...prev,
@@ -3143,6 +3404,7 @@ const RCAModule = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     title: '',
+    severity: 'Medium',
     rootCause: '',
     correctiveAction: '',
     preventiveAction: ''
@@ -3196,6 +3458,26 @@ const RCAModule = () => {
             />
           </div>
 
+          {/* Severity */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              CAPA Severity
+            </label>
+            <select
+              className="w-full p-2 border rounded"
+              value={form.severity}
+              onChange={(e) => setForm({ ...form, severity: e.target.value })}
+            >
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Determines initial risk tier: Critical/High → High Risk, Medium → Medium Risk, Low → Low Risk
+            </p>
+          </div>
+
           {/* Root Cause */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3243,14 +3525,20 @@ const RCAModule = () => {
             onClick={() => {
               if (!isFormValid) return;
 
-              addRecord('capa', {
+              const severityToRisk = { Critical: 'High', High: 'High', Medium: 'Medium', Low: 'Low' };
+              const riskTier = severityToRisk[form.severity] || 'Low';
+              const newCapa = addRecord('capa', {
                 ...form,
                 status: 'Open',
-                approvalStatus: 'Pending'
+                approvalStatus: 'Pending',
+                riskTier,
+                riskFactors: [{ source: 'CAPA Severity', sourceId: 'self', field: 'severity', value: form.severity }]
               });
+              addAuditEntry('capa', newCapa.id, 'Risk Tier Set', `Risk tier: ${riskTier} (from CAPA severity: ${form.severity})`);
 
               setForm({
                 title: '',
+                severity: 'Medium',
                 rootCause: '',
                 correctiveAction: '',
                 preventiveAction: ''
@@ -4146,6 +4434,7 @@ const handleESignatureConfirm = (signatureData) => {
 const InitiateCAPAModal = ({ source, onConfirm, onCancel }) => {
   const [form, setForm] = useState({
     title: source ? `CAPA for ${source.module.toUpperCase()}: ${source.recordTitle}` : '',
+    severity: 'Medium',
     rootCause: '',
     correctiveAction: '',
     preventiveAction: ''
@@ -4185,6 +4474,25 @@ const InitiateCAPAModal = ({ source, onConfirm, onCancel }) => {
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              CAPA Severity
+            </label>
+            <select
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
+              value={form.severity}
+              onChange={(e) => setForm({ ...form, severity: e.target.value })}
+            >
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Sets initial risk tier. Linked record data may override this during auto-calculation.
+            </p>
           </div>
 
           <div>
